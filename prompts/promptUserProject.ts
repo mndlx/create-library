@@ -1,30 +1,25 @@
 import * as p from '@clack/prompts';
-import * as color from 'picocolors';
 
 /**
- * Richiedi le informazioni per creare un nuovo progetto
- * @returns {Promise} Promise con le informazioni del progetto
+ * Richiedi le informazioni per creare un nuovo progetto.
+ * @returns Promise con le informazioni del progetto
  */
 export const promptUserProject = async () => {
-
-    console.clear();
-    p.intro(`${color.bgCyan(color.black(' Create App '))}`);
-
-    /**
-     * Richiedi il nome del progetto
-     */
     const __name = () =>
         p.text({
             message: 'Provide a name for your project',
             initialValue: 'my-react-lib',
             validate: (value) => {
                 if (!value) return 'Please enter a name.';
+                if (!/^[a-z0-9._-]+$/.test(value)) {
+                    return 'Use lowercase letters, numbers, dashes, dots or underscores only.';
+                }
             },
         });
 
     const project = await p.group(
         {
-            __name
+            __name,
         },
         {
             onCancel: () => {
@@ -35,4 +30,4 @@ export const promptUserProject = async () => {
     );
 
     return project;
-}
+};

@@ -5,23 +5,27 @@
   "author": "Mariano De Luca",
   "license": "ISC",
   "scripts": {
-    "build": "tsc --build",
+    "build": "tsc",
     "dev": "node ./bin/generate.js",
+    "prepublishOnly": "tsc",
     "deploy": "yarn run build && yarn publish"
   },
   "bin": {
     "virtuallab-create-library": "bin/generate.js"
   },
+  "files": [
+    "bin",
+    "utils",
+    "prompts",
+    "types",
+    "vite-react-ubundle"
+  ],
   "dependencies": {
     "@clack/prompts": "^0.6.3",
-    "fs": "^0.0.1-security",
-    "picocolors": "^1.0.0",
-    "rimraf": "^5.0.1",
-    "shelljs": "^0.8.5"
+    "picocolors": "^1.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.2.1",
-    "ts-node": "^10.9.1",
     "typescript": "^5.0.4"
   }
 }

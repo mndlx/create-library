@@ -1,12 +1,18 @@
 {
   "compilerOptions": {
+    "target": "es2020",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "lib": ["es2020"],
+    "strict": true,
     "noImplicitAny": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
     "noEmitOnError": true,
     "removeComments": false,
-    "sourceMap": false,
-    "target": "es5",
-    "strict": true,
-    "declarationMap": false
+    "sourceMap": false
   },
-  "exclude": ["./vite-react-ubundle"]
+  "include": ["bin", "utils", "prompts", "types"],
+  "exclude": ["node_modules", "vite-react-ubundle"]
 }

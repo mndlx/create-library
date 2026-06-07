@@ -1,36 +1,57 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.replaceReactViteUbundleTemplatePlaceholders = void 0;
-var path = require("path");
-var fs = require("fs");
-var ENCODING = 'utf8';
-var tokenReplace = function (template, tokens) {
-    var result = template;
-    Object.keys(tokens).forEach(function (token) {
-        result = result.replace(new RegExp("__".concat(token, "__"), 'g'), tokens[token]);
+const path = __importStar(require("path"));
+const fs = __importStar(require("fs"));
+const ENCODING = 'utf8';
+const tokenReplace = (template, tokens) => {
+    let result = template;
+    Object.keys(tokens).forEach((token) => {
+        result = result.replace(new RegExp(`__${token}__`, 'g'), tokens[token]);
     });
     return result;
 };
 /**
- * Rimpiazza i token statici presenti nel template 'ReactViteUbundle'.
+ * Rimpiazza i token statici presenti nel template 'vite-react-ubundle'.
  * @param project       Prompt contenente le info del progetto
  * @param projectPath   Percorso del progetto
  */
-var replaceReactViteUbundleTemplatePlaceholders = function (project, projectPath) {
-    var projectMainPkg = path.join(projectPath, 'package.json');
-    var projectDemoPkg = path.join(projectPath, "/demo/package.json");
-    var projectLibPkg = path.join(projectPath, "/lib/package.json");
-    var projectDemoIndex = path.join(projectPath, "/demo/index.html");
-    var projectDemoHomePageIndex = path.join(projectPath, "/demo/src/features/HomePage/index.tsx");
-    var projectMainPkgContent = fs.readFileSync(projectMainPkg, ENCODING);
-    var projectDemoPkgContent = fs.readFileSync(projectDemoPkg, ENCODING);
-    var projectLibPkgContent = fs.readFileSync(projectLibPkg, ENCODING);
-    var projectDemoIndexContent = fs.readFileSync(projectDemoIndex, ENCODING);
-    var projectDemoHomePageIndexContent = fs.readFileSync(projectDemoHomePageIndex, ENCODING);
-    fs.writeFileSync(projectMainPkg, tokenReplace(projectMainPkgContent, { REPLACE: project.__name })); // Configurazione del package.json nella root del template
-    fs.writeFileSync(projectDemoPkg, tokenReplace(projectDemoPkgContent, { REPLACE: project.__name })); // Configurazione del package.json nella demo del template
-    fs.writeFileSync(projectLibPkg, tokenReplace(projectLibPkgContent, { REPLACE: project.__name })); // Configurazione del package.json nella libreria del template
-    fs.writeFileSync(projectDemoIndex, tokenReplace(projectDemoIndexContent, { REPLACE: project.__name })); // Configurazione del index.html nella demo del template
-    fs.writeFileSync(projectDemoHomePageIndex, tokenReplace(projectDemoHomePageIndexContent, { REPLACE: project.__name })); // Configurazione del index.html nella demo del template
+const replaceReactViteUbundleTemplatePlaceholders = (project, projectPath) => {
+    const tokens = { REPLACE: project.__name };
+    const targets = [
+        'package.json',
+        'demo/package.json',
+        'lib/package.json',
+        'demo/index.html',
+        'demo/src/features/HomePage/index.tsx',
+    ];
+    for (const relativePath of targets) {
+        const filePath = path.join(projectPath, relativePath);
+        const content = fs.readFileSync(filePath, ENCODING);
+        fs.writeFileSync(filePath, tokenReplace(content, tokens));
+    }
 };
 exports.replaceReactViteUbundleTemplatePlaceholders = replaceReactViteUbundleTemplatePlaceholders;
