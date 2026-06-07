@@ -1,6 +1,6 @@
 import * as path from 'path';
 import * as fs from 'fs';
-import { ProfilePromptGroupAwaitedReturn } from '../types/index';
+import { ProjectState } from '../types/index';
 
 const ENCODING = 'utf8';
 
@@ -14,11 +14,11 @@ const tokenReplace = (template: string, tokens: Record<string, string>) => {
 
 /**
  * Rimpiazza i token statici presenti nel template 'vite-react-ubundle'.
- * @param project       Prompt contenente le info del progetto
+ * @param project       Stato contenente le info del progetto
  * @param projectPath   Percorso del progetto
  */
 export const replaceReactViteUbundleTemplatePlaceholders = (
-    project: ProfilePromptGroupAwaitedReturn,
+    project: ProjectState,
     projectPath: string
 ) => {
     const tokens = { REPLACE: project.__name };

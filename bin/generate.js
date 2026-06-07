@@ -16,46 +16,58 @@ var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (
 }) : function(o, v) {
     o["default"] = v;
 });
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
-const p = __importStar(require("@clack/prompts"));
-const color = __importStar(require("picocolors"));
 const path = __importStar(require("path"));
+const mandolin_1 = require("@virtual-registry/mandolin");
 const promptUserProject_1 = require("../prompts/promptUserProject");
 const copyTemplate_1 = require("../utils/copyTemplate");
 const detokenize_1 = require("../utils/detokenize");
+const { Spinner, text } = mandolin_1.Components;
 const TEMPLATE_DIR = path.join(__dirname, '..', 'vite-react-ubundle');
 async function main() {
-    const spinner = p.spinner();
     const currentPath = process.cwd();
-    p.intro(`${color.cyan(' virtuallab-create-library ')}`);
+    console.log(text(' virtuallab-create-library ', { color: 51 }));
     const project = await (0, promptUserProject_1.promptUserProject)();
     const projectPath = path.join(currentPath, project.__name);
-    spinner.start('Creating library template');
-    (0, copyTemplate_1.copyTemplate)(TEMPLATE_DIR, projectPath);
-    spinner.stop(`Created ${project.__name} structure`);
-    spinner.start('Finalizing');
-    (0, detokenize_1.replaceReactViteUbundleTemplatePlaceholders)(project, projectPath);
-    spinner.stop('Ready');
-    const nextSteps = color.white(`
-Here are the details of your project:
-${color.green('Project Name:')} ${project.__name}
-
-Follow the next steps to get started:
-
-> ${color.cyan('From the root folder')}
-    Run the following command:
-    yarn run dev
-`);
-    p.outro(nextSteps);
+    // The animated spinner needs a TTY; fall back to plain logs otherwise.
+    const spinner = process.stdout.isTTY ? new Spinner({ color: 82 }, 'Creating library template') : null;
+    spinner?.start();
+    try {
+        (0, copyTemplate_1.copyTemplate)(TEMPLATE_DIR, projectPath);
+        (0, detokenize_1.replaceReactViteUbundleTemplatePlaceholders)(project, projectPath);
+        const done = `Created ${project.__name} structure`;
+        if (spinner)
+            spinner.stop(done);
+        else
+            console.log(done);
+    }
+    catch (err) {
+        if (spinner)
+            spinner.stop('Failed to create the library');
+        throw err;
+    }
+    console.log(text(`\nProject: ${project.__name}`, { color: 82 }));
+    console.log('From the root folder run:');
+    console.log(text('  yarn run dev', { color: 51 }));
 }
 main().catch((err) => {
-    p.cancel(err instanceof Error ? err.message : String(err));
+    console.error(err instanceof Error ? err.message : String(err));
     process.exit(1);
 });

@@ -1,5 +1,3 @@
-import { PromptGroupAwaitedReturn } from '@clack/prompts';
-
-export type ProfilePromptGroupAwaitedReturn = PromptGroupAwaitedReturn<{
+export interface ProjectState {
     __name: string;
-}>;
+}

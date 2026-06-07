@@ -21,8 +21,7 @@
     "vite-react-ubundle"
   ],
   "dependencies": {
-    "@clack/prompts": "^0.6.3",
-    "picocolors": "^1.0.0"
+    "@virtual-registry/mandolin": "^1.1.9"
   },
   "devDependencies": {
     "@types/node": "^20.2.1",
