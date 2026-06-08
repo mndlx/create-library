@@ -33,29 +33,25 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.replaceReactViteUbundleTemplatePlaceholders = void 0;
-const path = __importStar(require("path"));
+exports.mergePackageJson = void 0;
 const fs = __importStar(require("fs"));
-const ENCODING = 'utf8';
-const tokenReplace = (template, tokens) => {
-    let result = template;
-    Object.keys(tokens).forEach((token) => {
-        result = result.replace(new RegExp(`__${token}__`, 'g'), tokens[token]);
-    });
-    return result;
-};
-/**
- * Rimpiazza i token statici presenti nel template 'vite-react-ubundle'.
- * @param project       Stato contenente le info del progetto
- * @param projectPath   Percorso del progetto
- */
-const replaceReactViteUbundleTemplatePlaceholders = (project, projectPath) => {
-    const tokens = { REPLACE: project.__name };
-    const targets = ['package.json', 'README.md'];
-    for (const relativePath of targets) {
-        const filePath = path.join(projectPath, relativePath);
-        const content = fs.readFileSync(filePath, ENCODING);
-        fs.writeFileSync(filePath, tokenReplace(content, tokens));
+const path = __importStar(require("path"));
+/** Shallow-merge object fields (deps, scripts, ...) of a patch into the project's package.json. */
+const mergePackageJson = (projectDir, patch) => {
+    if (!patch)
+        return;
+    const pkgPath = path.join(projectDir, 'package.json');
+    if (!fs.existsSync(pkgPath))
+        return;
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+    for (const [key, value] of Object.entries(patch)) {
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+            pkg[key] = { ...(pkg[key] || {}), ...value };
+        }
+        else {
+            pkg[key] = value;
+        }
     }
+    fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
 };
-exports.replaceReactViteUbundleTemplatePlaceholders = replaceReactViteUbundleTemplatePlaceholders;
+exports.mergePackageJson = mergePackageJson;

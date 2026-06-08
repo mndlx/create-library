@@ -1,24 +1,25 @@
 {
   "name": "virtuallab-create-library",
-  "version": "1.0.9",
-  "description": "Create library",
+  "version": "1.1.0",
+  "description": "Scaffold and configure project templates from a manifest-driven engine.",
   "author": "Mariano De Luca",
   "license": "ISC",
+  "type": "commonjs",
   "scripts": {
     "build": "tsc",
     "dev": "node ./bin/generate.js",
+    "bo": "node ./bin/bo.js",
     "prepublishOnly": "tsc",
     "deploy": "yarn run build && yarn publish"
   },
   "bin": {
-    "virtuallab-create-library": "bin/generate.js"
+    "virtuallab-create-library": "bin/generate.js",
+    "virtuallab-create-library-bo": "bin/bo.js"
   },
   "files": [
     "bin",
-    "utils",
-    "prompts",
-    "types",
-    "vite-react-ubundle"
+    "engine",
+    "templates"
   ],
   "dependencies": {
     "@virtual-registry/mandolin": "^1.1.9"

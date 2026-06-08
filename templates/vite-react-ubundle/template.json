@@ -1,0 +1,22 @@
+{
+  "name": "vite-react-ubundle",
+  "title": "React library (Vite + Storybook + MUI)",
+  "description": "A React component library built with Vite, TypeScript, MUI and documented in Storybook.",
+  "version": "1.0.0",
+  "source": "template",
+  "nameVar": "name",
+  "prompts": [
+    {
+      "name": "name",
+      "message": "Provide a name for your project",
+      "type": "text",
+      "default": "my-react-lib",
+      "token": "REPLACE",
+      "validate": "packageName"
+    }
+  ],
+  "detokenize": { "exclude": [] },
+  "packageJson": {},
+  "hooks": { "postGenerate": [] },
+  "nextSteps": ["cd __REPLACE__", "npm install", "npm run storybook"]
+}

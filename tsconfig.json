@@ -11,8 +11,9 @@
     "forceConsistentCasingInFileNames": true,
     "noEmitOnError": true,
     "removeComments": false,
-    "sourceMap": false
+    "sourceMap": false,
+    "declaration": false
   },
-  "include": ["bin", "utils", "prompts", "types"],
-  "exclude": ["node_modules", "vite-react-ubundle"]
+  "include": ["bin", "engine"],
+  "exclude": ["node_modules", "templates"]
 }

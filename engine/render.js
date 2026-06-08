@@ -33,20 +33,31 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.copyTemplate = void 0;
+exports.detokenizeTree = exports.tokenReplace = void 0;
 const fs = __importStar(require("fs"));
-/**
- * Copia ricorsivamente il template nella cartella di destinazione.
- * @param templateDir   Percorso assoluto del template sorgente
- * @param projectPath   Percorso assoluto del progetto da creare
- */
-const copyTemplate = (templateDir, projectPath) => {
-    if (!fs.existsSync(templateDir)) {
-        throw new Error(`Template directory not found: ${templateDir}`);
+const path = __importStar(require("path"));
+const fsx_1 = require("./fsx");
+/** Replace every `__TOKEN__` occurrence (literal, no regex) with its value. */
+const tokenReplace = (input, tokens) => {
+    let out = input;
+    for (const [token, value] of Object.entries(tokens)) {
+        out = out.split(`__${token}__`).join(value);
     }
-    if (fs.existsSync(projectPath)) {
-        throw new Error(`Target directory already exists: ${projectPath}`);
-    }
-    fs.cpSync(templateDir, projectPath, { recursive: true });
+    return out;
 };
-exports.copyTemplate = copyTemplate;
+exports.tokenReplace = tokenReplace;
+/** Replace tokens across every text file under `root`. */
+const detokenizeTree = (root, tokens, extraExcludePaths = []) => {
+    for (const file of (0, fsx_1.walkFiles)(root)) {
+        if ((0, fsx_1.isProbablyBinary)(file))
+            continue;
+        const rel = path.relative(root, file);
+        if (extraExcludePaths.some((ex) => rel.includes(ex)))
+            continue;
+        const content = fs.readFileSync(file, 'utf8');
+        const replaced = (0, exports.tokenReplace)(content, tokens);
+        if (replaced !== content)
+            fs.writeFileSync(file, replaced);
+    }
+};
+exports.detokenizeTree = detokenizeTree;
