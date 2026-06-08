@@ -64,8 +64,10 @@ async function main() {
         throw err;
     }
     console.log(text(`\nProject: ${project.__name}`, { color: 82 }));
-    console.log('From the root folder run:');
-    console.log(text('  yarn run dev', { color: 51 }));
+    console.log('\nNext steps:');
+    console.log(text(`  cd ${project.__name}`, { color: 51 }));
+    console.log(text('  npm install', { color: 51 }));
+    console.log(text('  npm run storybook', { color: 51 }));
 }
 main().catch((err) => {
     console.error(err instanceof Error ? err.message : String(err));

@@ -1,4 +1,6 @@
 node_modules
-*/dist
-.vs
-*.lock
+dist
+storybook-static
+coverage
+package-lock.json
+*.log

@@ -51,13 +51,7 @@ const tokenReplace = (template, tokens) => {
  */
 const replaceReactViteUbundleTemplatePlaceholders = (project, projectPath) => {
     const tokens = { REPLACE: project.__name };
-    const targets = [
-        'package.json',
-        'demo/package.json',
-        'lib/package.json',
-        'demo/index.html',
-        'demo/src/features/HomePage/index.tsx',
-    ];
+    const targets = ['package.json', 'README.md'];
     for (const relativePath of targets) {
         const filePath = path.join(projectPath, relativePath);
         const content = fs.readFileSync(filePath, ENCODING);
