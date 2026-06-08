@@ -34,3 +34,42 @@ export const runTemplatePrompts = async (template: LoadedTemplate): Promise<Stat
     await wizard.draw({ clean: true });
     return wizard.state ?? initial;
 };
+
+const YES = 'yes';
+const NO = 'no';
+
+/** Drive the manifest's features through a wizard and return a selection map. */
+export const runFeatureSelection = async (
+    template: LoadedTemplate
+): Promise<Record<string, boolean | string>> => {
+    const features = template.manifest.features ?? [];
+    if (!features.length) return {};
+
+    const wizard = new Terminal<Record<string, string>>();
+    const initial: Record<string, string> = {};
+    for (const f of features) {
+        initial[f.id] = f.type === 'boolean'
+            ? (f.default ? YES : NO)
+            : ((f.default as string) ?? f.options?.[0] ?? '');
+    }
+    wizard.initState(initial);
+
+    for (const f of features) {
+        wizard.newLine(f.label);
+        if (f.type === 'select' && f.options && f.options.length) {
+            const options = f.options;
+            wizard.newSelectLine(options, (sel, state) => ({ ...state, [f.id]: String(sel) }));
+        } else {
+            wizard.newSelectLine([YES, NO], (sel, state) => ({ ...state, [f.id]: String(sel) }));
+        }
+    }
+
+    await wizard.draw({ clean: true });
+    const state = wizard.state ?? initial;
+
+    const selection: Record<string, boolean | string> = {};
+    for (const f of features) {
+        selection[f.id] = f.type === 'boolean' ? state[f.id] === YES : state[f.id];
+    }
+    return selection;
+};

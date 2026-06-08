@@ -79,6 +79,36 @@ const validateManifest = (data) => {
     if (m.nextSteps !== undefined && !Array.isArray(m.nextSteps)) {
         errors.push('"nextSteps" must be an array');
     }
+    if (m.features !== undefined) {
+        if (!Array.isArray(m.features)) {
+            errors.push('"features" must be an array');
+        }
+        else {
+            m.features.forEach((raw, i) => {
+                if (!raw || typeof raw !== 'object') {
+                    errors.push(`features[${i}] must be an object`);
+                    return;
+                }
+                const f = raw;
+                if (typeof f.id !== 'string' || !f.id)
+                    errors.push(`features[${i}].id is required`);
+                if (typeof f.label !== 'string' || !f.label)
+                    errors.push(`features[${i}].label is required`);
+                const type = f.type ?? 'boolean';
+                if (type !== 'boolean' && type !== 'select') {
+                    errors.push(`features[${i}].type must be "boolean" or "select"`);
+                }
+                if (type === 'select') {
+                    if (!Array.isArray(f.options) || f.options.length === 0) {
+                        errors.push(`features[${i}].options is required for a select feature`);
+                    }
+                    if (!f.variants || typeof f.variants !== 'object') {
+                        errors.push(`features[${i}].variants is required for a select feature`);
+                    }
+                }
+            });
+        }
+    }
     return errors;
 };
 exports.validateManifest = validateManifest;

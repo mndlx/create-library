@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.runTemplatePrompts = void 0;
+exports.runFeatureSelection = exports.runTemplatePrompts = void 0;
 const mandolin_1 = require("@virtual-registry/mandolin");
 const validators_1 = require("./validators");
 const applyValidator = (prompt, value) => {
@@ -33,3 +33,37 @@ const runTemplatePrompts = async (template) => {
     return wizard.state ?? initial;
 };
 exports.runTemplatePrompts = runTemplatePrompts;
+const YES = 'yes';
+const NO = 'no';
+/** Drive the manifest's features through a wizard and return a selection map. */
+const runFeatureSelection = async (template) => {
+    const features = template.manifest.features ?? [];
+    if (!features.length)
+        return {};
+    const wizard = new mandolin_1.Terminal();
+    const initial = {};
+    for (const f of features) {
+        initial[f.id] = f.type === 'boolean'
+            ? (f.default ? YES : NO)
+            : (f.default ?? f.options?.[0] ?? '');
+    }
+    wizard.initState(initial);
+    for (const f of features) {
+        wizard.newLine(f.label);
+        if (f.type === 'select' && f.options && f.options.length) {
+            const options = f.options;
+            wizard.newSelectLine(options, (sel, state) => ({ ...state, [f.id]: String(sel) }));
+        }
+        else {
+            wizard.newSelectLine([YES, NO], (sel, state) => ({ ...state, [f.id]: String(sel) }));
+        }
+    }
+    await wizard.draw({ clean: true });
+    const state = wizard.state ?? initial;
+    const selection = {};
+    for (const f of features) {
+        selection[f.id] = f.type === 'boolean' ? state[f.id] === YES : state[f.id];
+    }
+    return selection;
+};
+exports.runFeatureSelection = runFeatureSelection;

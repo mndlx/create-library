@@ -1,8 +1,8 @@
 {
   "name": "vite-react-ubundle",
-  "title": "React library (Vite + Storybook + MUI)",
-  "description": "A React component library built with Vite, TypeScript, MUI and documented in Storybook.",
-  "version": "1.0.0",
+  "title": "React component library (Vite + TypeScript)",
+  "description": "A configurable React component library: choose styling, Storybook, tests and components.",
+  "version": "2.0.0",
   "source": "template",
   "nameVar": "name",
   "prompts": [
@@ -15,8 +15,93 @@
       "validate": "packageName"
     }
   ],
+  "features": [
+    {
+      "id": "styling",
+      "label": "Styling approach",
+      "type": "select",
+      "options": ["mui", "css"],
+      "default": "mui",
+      "variants": {
+        "mui": {
+          "overlay": "features/styling-mui",
+          "packageJson": {
+            "peerDependencies": {
+              "@emotion/react": "^11.0.0",
+              "@emotion/styled": "^11.0.0",
+              "@mui/material": "^5.0.0"
+            },
+            "devDependencies": {
+              "@emotion/react": "^11.13.0",
+              "@emotion/styled": "^11.13.0",
+              "@mui/material": "^5.16.0"
+            }
+          }
+        },
+        "css": {
+          "overlay": "features/styling-css"
+        }
+      }
+    },
+    {
+      "id": "storybook",
+      "label": "Include Storybook",
+      "type": "boolean",
+      "default": true,
+      "overlay": "features/storybook",
+      "packageJson": {
+        "scripts": {
+          "dev": "storybook dev -p 6006",
+          "storybook": "storybook dev -p 6006",
+          "build-storybook": "storybook build"
+        },
+        "devDependencies": {
+          "@storybook/addon-essentials": "^8.3.0",
+          "@storybook/addon-interactions": "^8.3.0",
+          "@storybook/react": "^8.3.0",
+          "@storybook/react-vite": "^8.3.0",
+          "@storybook/test": "^8.3.0",
+          "storybook": "^8.3.0"
+        }
+      }
+    },
+    {
+      "id": "tests",
+      "label": "Include Vitest tests",
+      "type": "boolean",
+      "default": true,
+      "overlay": "features/tests",
+      "packageJson": {
+        "scripts": {
+          "test": "vitest run",
+          "test:watch": "vitest"
+        },
+        "devDependencies": {
+          "@testing-library/jest-dom": "^6.4.0",
+          "@testing-library/react": "^16.0.0",
+          "@testing-library/user-event": "^14.5.0",
+          "jsdom": "^25.0.0",
+          "vitest": "^2.1.0"
+        }
+      }
+    },
+    {
+      "id": "button",
+      "label": "Include a Button component",
+      "type": "boolean",
+      "default": false,
+      "overlay": "features/button",
+      "inject": [
+        {
+          "file": "src/components/index.ts",
+          "marker": "componentExports",
+          "content": "export * from './Button';"
+        }
+      ]
+    }
+  ],
   "detokenize": { "exclude": [] },
   "packageJson": {},
   "hooks": { "postGenerate": [] },
-  "nextSteps": ["cd __REPLACE__", "npm install", "npm run storybook"]
+  "nextSteps": ["cd __REPLACE__", "npm install"]
 }

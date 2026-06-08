@@ -1,23 +1,26 @@
 # virtuallab-create-library
 
-A small, manifest-driven scaffolding system. It generates projects from
-**templates** and ships a terminal **back-office** to create and configure those
-templates so they can be reused across apps.
+A manifest-driven scaffolding system. It generates projects from **templates**,
+lets you **configure what each template produces** (components, Storybook, tests,
+styling…) through conditional features, and ships a terminal **back-office** to
+create, configure and tokenize templates so they can be reused across apps.
 
-## Usage
-
-Scaffold a project from a template:
+## Generate a project
 
 ```bash
 npx virtuallab-create-library
 ```
 
-It discovers the available templates, asks the template's questions, and writes
-the project into a new folder. Then follow the printed next steps.
+It discovers the available templates, asks the template's questions, lets you
+toggle its features, and writes the configured project into a new folder.
+
+Flags:
+
+- `--yes` / `-y` — accept defaults, no prompts
+- `--save-preset <file>` — save the chosen answers + features to a preset
+- `--preset <file>` — generate from a saved preset
 
 ## Back-office
-
-Create and configure templates interactively:
 
 ```bash
 npx virtuallab-create-library-bo
@@ -25,71 +28,96 @@ npx virtuallab-create-library-bo
 
 From the menu you can:
 
-- **List** the discovered templates
-- **Create** a new template skeleton (manifest + `template/` payload)
-- **Configure** a template — add prompts, dependencies, scripts and post-generate hooks
-- **Validate** a template's manifest
-- **Register** an external templates directory
+- **Configure & generate** — pick a template, choose features, generate now
+- **Configure & save preset** — save a reusable configuration
+- **Generate from preset**
+- **Create template** — scaffold a new template (manifest + payload)
+- **Add component to template** — create a component overlay and register it as a feature
+- **List / Validate** templates and **register external directories**
 
-## Templates
+## How a template works
 
-A template is a folder with a `template.json` manifest and a `template/` payload:
+A template is a folder with a `template.json` manifest, a base `template/`
+payload, and optional feature overlays:
 
 ```
 my-template/
   template.json
-  template/        # files copied into the generated project
+  template/            # base payload, always copied
+  features/
+    storybook/         # overlay copied only when the feature is enabled
+    tests/
+    styling-css/
 ```
 
-`template.json`:
+Generation: copy the base payload → overlay each enabled feature → resolve
+`/* inject:<marker> */` snippets → merge `package.json` (base + features) →
+replace `__TOKEN__` placeholders across every text file → run hooks.
+
+### Manifest
 
 ```jsonc
 {
   "name": "my-template",
-  "title": "Human readable title",
-  "nameVar": "name",                 // prompt whose answer names the output folder
+  "nameVar": "name",                     // prompt whose answer names the folder
   "prompts": [
+    { "name": "name", "message": "Project name", "type": "text",
+      "default": "my-app", "token": "REPLACE", "validate": "packageName" }
+  ],
+  "features": [
     {
-      "name": "name",
-      "message": "Provide a name for your project",
-      "type": "text",               // "text" | "select"
-      "default": "my-app",
-      "token": "REPLACE",           // __REPLACE__ in the payload -> answer
-      "validate": "packageName"      // "packageName" | "nonEmpty" | "none"
+      "id": "storybook", "label": "Include Storybook",
+      "type": "boolean", "default": true,
+      "overlay": "features/storybook",
+      "packageJson": { "devDependencies": { "storybook": "^8.3.0" } }
+    },
+    {
+      "id": "styling", "label": "Styling", "type": "select",
+      "options": ["mui", "css"], "default": "mui",
+      "variants": {
+        "mui": { "overlay": "features/styling-mui", "packageJson": { } },
+        "css": { "overlay": "features/styling-css" }
+      }
+    },
+    {
+      "id": "button", "label": "Include a Button", "type": "boolean", "default": false,
+      "overlay": "features/button",
+      "inject": [
+        { "file": "src/components/index.ts", "marker": "componentExports",
+          "content": "export * from './Button';" }
+      ]
     }
   ],
-  "detokenize": { "exclude": [] },   // path fragments to skip during replacement
-  "packageJson": {                    // merged into the generated package.json
-    "dependencies": {},
-    "devDependencies": {},
-    "scripts": {}
-  },
-  "hooks": { "postGenerate": [] },    // shell commands run in the project
   "nextSteps": ["cd __REPLACE__", "npm install"]
 }
 ```
 
-Tokens are replaced across **every text file** of the payload, so there is no
-hardcoded file list to maintain.
+A feature can contribute an **overlay** (files), a **packageJson** patch
+(dependencies / scripts), **inject** snippets (at `/* inject:<marker> */`
+markers in base files), and **tokens**.
+
+### Presets
+
+A preset is just a saved configuration:
+
+```json
+{ "template": "vite-react-ubundle",
+  "answers": { "name": "acme-ui" },
+  "features": { "styling": "css", "storybook": false, "tests": true, "button": true } }
+```
 
 ## Where templates live
 
-Templates are discovered, in order, from:
-
-1. the bundled `templates/` directory,
-2. directories listed in the `VLCL_TEMPLATES_DIR` environment variable
-   (OS path-delimiter separated),
-3. directories saved in `~/.virtuallab-create-library.json` (`{ "templateDirs": [] }`).
-
-The first template found for a given `name` wins.
+Discovered, in order, from: the bundled `templates/` directory, the
+`VLCL_TEMPLATES_DIR` environment variable (OS path-delimiter separated), and
+directories saved in `~/.virtuallab-create-library.json`. First name wins.
 
 ## Architecture
 
-The engine (`engine/`) is framework-agnostic and UI-free: manifest loading and
-validation, template discovery, generation (copy + tree-wide detokenize +
-package.json merge + hooks) and prompts. The `generate` and `bo` CLIs are thin
-layers on top, which keeps the door open for a future web back-office on the same
-engine.
+The engine (`engine/`) is UI-free and reusable: manifest load/validate,
+discovery, feature resolution, overlay + inject, package.json merge, token
+replacement, presets, scaffolding. The `generate` and `bo` CLIs are thin layers
+on top, leaving room for a future web back-office on the same engine.
 
 ## Development
 

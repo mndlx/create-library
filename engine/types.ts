@@ -17,9 +17,13 @@ export interface PromptDef {
     options?: string[];
 }
 
-export interface DetokenizeConfig {
-    /** Extra path fragments to skip while replacing tokens. */
-    exclude?: string[];
+export interface InjectDef {
+    /** Payload-relative file containing the marker `/* inject:<marker> *​/`. */
+    file: string;
+    /** Marker name. */
+    marker: string;
+    /** Snippet inserted at the marker when the effect is active. */
+    content: string;
 }
 
 export interface PackageJsonPatch {
@@ -30,8 +34,37 @@ export interface PackageJsonPatch {
     [key: string]: unknown;
 }
 
+/** What an active feature (or select variant) contributes to the output. */
+export interface FeatureEffects {
+    /** Directory (relative to the template) copied over the output. */
+    overlay?: string;
+    /** package.json fields merged in. */
+    packageJson?: PackageJsonPatch;
+    /** Snippets injected at markers. */
+    inject?: InjectDef[];
+    /** Extra `__TOKEN__` values. */
+    tokens?: Record<string, string>;
+}
+
+export type FeatureType = 'boolean' | 'select';
+
+export interface FeatureDef extends FeatureEffects {
+    id: string;
+    label: string;
+    type: FeatureType;
+    /** Default value: boolean for "boolean", an option string for "select". */
+    default?: boolean | string;
+    /** Options for "select". */
+    options?: string[];
+    /** Per-option effects for "select". */
+    variants?: Record<string, FeatureEffects>;
+}
+
+export interface DetokenizeConfig {
+    exclude?: string[];
+}
+
 export interface TemplateHooks {
-    /** Shell commands executed in the generated project after generation. */
     postGenerate?: string[];
 }
 
@@ -45,6 +78,8 @@ export interface TemplateManifest {
     /** Prompt whose answer names the output folder; defaults to the first prompt. */
     nameVar?: string;
     prompts: PromptDef[];
+    /** Configurable, conditional parts of the output. */
+    features?: FeatureDef[];
     detokenize?: DetokenizeConfig;
     packageJson?: PackageJsonPatch;
     hooks?: TemplateHooks;
@@ -53,10 +88,14 @@ export interface TemplateManifest {
 
 export interface LoadedTemplate {
     manifest: TemplateManifest;
-    /** Directory containing template.json. */
     dir: string;
-    /** Resolved payload directory. */
     sourceDir: string;
-    /** Root the template was discovered in. */
     origin: string;
+}
+
+/** A saved/loaded generation configuration (a "preset"). */
+export interface GenerationConfig {
+    template?: string;
+    answers?: Record<string, string>;
+    features?: Record<string, boolean | string>;
 }

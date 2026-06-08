@@ -5,15 +5,13 @@ import type { SxProps, Theme } from '@mui/material';
 export interface CardProps {
     /** Main content rendered in the left column. */
     children: React.ReactNode;
-    /** Action elements rendered in the right rail (e.g. icon buttons). */
+    /** Action elements rendered in the right rail. */
     actions?: React.ReactNode;
     /** Style overrides merged into the root container. */
     sx?: SxProps<Theme>;
 }
 
-/**
- * A two-column surface: content on the left, an optional action rail on the right.
- */
+/** A two-column surface: content on the left, an optional action rail on the right. */
 export const Card = React.forwardRef<HTMLDivElement, CardProps>(
     ({ children, actions, sx }, ref) => (
         <Box
@@ -33,7 +31,6 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(
             <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 2, flexGrow: 1 }}>
                 {children}
             </Box>
-
             {actions != null && (
                 <Box
                     sx={{

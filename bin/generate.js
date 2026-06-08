@@ -38,6 +38,19 @@ const path = __importStar(require("path"));
 const mandolin_1 = require("@virtual-registry/mandolin");
 const engine_1 = require("../engine");
 const { Spinner, text } = mandolin_1.Components;
+const parseArgs = (argv) => {
+    const args = { yes: false };
+    for (let i = 0; i < argv.length; i++) {
+        const a = argv[i];
+        if (a === '--preset')
+            args.preset = argv[++i];
+        else if (a === '--save-preset')
+            args.savePreset = argv[++i];
+        else if (a === '--yes' || a === '-y')
+            args.yes = true;
+    }
+    return args;
+};
 async function pickTemplate(templates) {
     if (templates.length === 1)
         return templates[0];
@@ -51,21 +64,48 @@ async function pickTemplate(templates) {
     return templates[idx];
 }
 async function main() {
+    const args = parseArgs(process.argv.slice(2));
     console.log(text(' virtuallab-create-library ', { color: 51 }));
     const templates = (0, engine_1.listTemplates)();
     if (!templates.length) {
-        console.error('No templates found. Create one with the back-office: virtuallab-create-library-bo');
+        console.error('No templates found. Create one with: virtuallab-create-library-bo');
         process.exit(1);
     }
-    const template = await pickTemplate(templates);
-    const answers = await (0, engine_1.runTemplatePrompts)(template);
+    let template;
+    let config;
+    if (args.preset) {
+        const preset = (0, engine_1.loadPreset)(args.preset);
+        const found = preset.template ? (0, engine_1.findTemplate)(preset.template) : undefined;
+        if (!found) {
+            console.error(`Preset references unknown template: ${preset.template}`);
+            process.exit(1);
+        }
+        template = found;
+        config = (0, engine_1.withDefaults)(template, preset);
+    }
+    else if (args.yes) {
+        template = await pickTemplate(templates);
+        config = (0, engine_1.withDefaults)(template, {});
+    }
+    else {
+        template = await pickTemplate(templates);
+        const answers = await (0, engine_1.runTemplatePrompts)(template);
+        const features = await (0, engine_1.runFeatureSelection)(template);
+        config = { answers, features };
+    }
+    const answers = config.answers ?? {};
+    const features = config.features ?? (0, engine_1.defaultSelection)(template);
     const projectName = answers[(0, engine_1.nameVarOf)(template)] || template.manifest.name;
     const targetDir = path.join(process.cwd(), projectName);
+    if (args.savePreset) {
+        (0, engine_1.savePreset)(args.savePreset, { template: template.manifest.name, answers, features });
+        console.log(text(`Saved preset to ${args.savePreset}`, { color: 82 }));
+    }
     const spinner = process.stdout.isTTY ? new Spinner({ color: 82 }, 'Creating project') : null;
     spinner?.start();
     let tokens;
     try {
-        ({ tokens } = (0, engine_1.generate)({ template, targetDir, answers }));
+        ({ tokens } = (0, engine_1.generate)({ template, targetDir, answers, features }));
         const done = `Created ${projectName}`;
         if (spinner)
             spinner.stop(done);
@@ -78,6 +118,11 @@ async function main() {
         throw err;
     }
     console.log(text(`\nProject: ${projectName}`, { color: 82 }));
+    const enabled = Object.entries(features)
+        .filter(([, v]) => v !== false && v !== '')
+        .map(([k, v]) => (v === true ? k : `${k}=${v}`));
+    if (enabled.length)
+        console.log(`Features: ${enabled.join(', ')}`);
     const steps = (0, engine_1.renderNextSteps)(template, tokens);
     if (steps.length) {
         console.log('\nNext steps:');
