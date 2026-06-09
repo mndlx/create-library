@@ -9,10 +9,11 @@ export interface ScaffoldOptions {
     name: string;
     title?: string;
     description?: string;
+    output?: 'new' | 'merge';
 }
 
 /** Create a new template skeleton (manifest + minimal payload). Returns its directory. */
-export const scaffoldTemplate = ({ rootDir, name, title, description }: ScaffoldOptions): string => {
+export const scaffoldTemplate = ({ rootDir, name, title, description, output = 'new' }: ScaffoldOptions): string => {
     const templateDir = path.join(rootDir, name);
     if (fs.existsSync(templateDir)) throw new Error(`Template already exists: ${templateDir}`);
 
@@ -25,6 +26,7 @@ export const scaffoldTemplate = ({ rootDir, name, title, description }: Scaffold
         description: description || '',
         version: '1.0.0',
         source: 'template',
+        output,
         nameVar: 'name',
         prompts: [
             {

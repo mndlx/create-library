@@ -9,7 +9,9 @@ import {
     generate,
     listTemplates,
     loadPreset,
+    mergeInto,
     nameVarOf,
+    outputModeOf,
     renderNextSteps,
     runFeatureSelection,
     runTemplatePrompts,
@@ -22,15 +24,22 @@ const { Spinner, text } = Components;
 interface Args {
     preset?: string;
     savePreset?: string;
+    into?: string;
+    mode?: 'new' | 'merge';
+    force: boolean;
     yes: boolean;
 }
 
 const parseArgs = (argv: string[]): Args => {
-    const args: Args = { yes: false };
+    const args: Args = { yes: false, force: false };
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
         if (a === '--preset') args.preset = argv[++i];
         else if (a === '--save-preset') args.savePreset = argv[++i];
+        else if (a === '--into') args.into = argv[++i];
+        else if (a === '--merge') args.mode = 'merge';
+        else if (a === '--new') args.mode = 'new';
+        else if (a === '--force') args.force = true;
         else if (a === '--yes' || a === '-y') args.yes = true;
     }
     return args;
@@ -46,6 +55,13 @@ async function pickTemplate(templates: LoadedTemplate[]): Promise<LoadedTemplate
     await wizard.draw({ clean: true });
     const idx = Math.max(0, labels.indexOf(wizard.state?.choice ?? labels[0]));
     return templates[idx];
+}
+
+function featureSummary(features: Record<string, boolean | string>): string {
+    const on = Object.entries(features)
+        .filter(([, v]) => v !== false && v !== '')
+        .map(([k, v]) => (v === true ? k : `${k}=${v}`));
+    return on.join(', ');
 }
 
 async function main() {
@@ -82,37 +98,51 @@ async function main() {
 
     const answers = config.answers ?? {};
     const features = config.features ?? defaultSelection(template);
-    const projectName = answers[nameVarOf(template)] || template.manifest.name;
-    const targetDir = path.join(process.cwd(), projectName);
+    const mode = args.mode ?? outputModeOf(template);
 
     if (args.savePreset) {
         savePreset(args.savePreset, { template: template.manifest.name, answers, features });
         console.log(text(`Saved preset to ${args.savePreset}`, { color: 82 }));
     }
 
-    const spinner = process.stdout.isTTY ? new Spinner({ color: 82 }, 'Creating project') : null;
+    const spinner = process.stdout.isTTY ? new Spinner({ color: 82 }, 'Working') : null;
     spinner?.start();
-    let tokens: Record<string, string>;
+
     try {
-        ({ tokens } = generate({ template, targetDir, answers, features }));
-        const done = `Created ${projectName}`;
-        if (spinner) spinner.stop(done);
-        else console.log(done);
+        if (mode === 'merge') {
+            const projectDir = path.resolve(args.into ?? process.cwd());
+            const { tokens, report } = mergeInto({ template, projectDir, answers, features, force: args.force });
+            if (spinner) spinner.stop('Merged template'); else console.log('Merged template');
+
+            console.log(text(`\nMerged "${template.manifest.name}" into ${projectDir}`, { color: 82 }));
+            if (featureSummary(features)) console.log(`Features: ${featureSummary(features)}`);
+            console.log(`Added ${report.created.length} file(s)${report.packageJsonMerged ? ', merged package.json' : ''}.`);
+            if (report.skipped.length) {
+                console.log(text(`Skipped ${report.skipped.length} existing file(s) (use --force to overwrite):`, { color: 214 }));
+                for (const f of report.skipped) console.log(`  - ${f}`);
+            }
+            const steps = renderNextSteps(template, tokens);
+            if (steps.length) {
+                console.log('\nNext steps:');
+                for (const step of steps) console.log(text('  ' + step, { color: 51 }));
+            }
+        } else {
+            const projectName = answers[nameVarOf(template)] || template.manifest.name;
+            const targetDir = path.join(path.resolve(args.into ?? process.cwd()), projectName);
+            const { tokens } = generate({ template, targetDir, answers, features });
+            if (spinner) spinner.stop(`Created ${projectName}`); else console.log(`Created ${projectName}`);
+
+            console.log(text(`\nProject: ${projectName}`, { color: 82 }));
+            if (featureSummary(features)) console.log(`Features: ${featureSummary(features)}`);
+            const steps = renderNextSteps(template, tokens);
+            if (steps.length) {
+                console.log('\nNext steps:');
+                for (const step of steps) console.log(text('  ' + step, { color: 51 }));
+            }
+        }
     } catch (err) {
-        if (spinner) spinner.stop('Failed to create the project');
+        if (spinner) spinner.stop('Failed');
         throw err;
-    }
-
-    console.log(text(`\nProject: ${projectName}`, { color: 82 }));
-    const enabled = Object.entries(features)
-        .filter(([, v]) => v !== false && v !== '')
-        .map(([k, v]) => (v === true ? k : `${k}=${v}`));
-    if (enabled.length) console.log(`Features: ${enabled.join(', ')}`);
-
-    const steps = renderNextSteps(template, tokens);
-    if (steps.length) {
-        console.log('\nNext steps:');
-        for (const step of steps) console.log(text('  ' + step, { color: 51 }));
     }
 }
 

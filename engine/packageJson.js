@@ -41,9 +41,9 @@ const mergePackageJson = (projectDir, patch) => {
     if (!patch)
         return;
     const pkgPath = path.join(projectDir, 'package.json');
-    if (!fs.existsSync(pkgPath))
-        return;
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+    const pkg = fs.existsSync(pkgPath)
+        ? JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
+        : {};
     for (const [key, value] of Object.entries(patch)) {
         if (value && typeof value === 'object' && !Array.isArray(value)) {
             pkg[key] = { ...(pkg[key] || {}), ...value };

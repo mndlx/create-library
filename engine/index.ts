@@ -4,6 +4,7 @@ export * from './manifest';
 export * from './registry';
 export * from './features';
 export * from './overlay';
+export * from './merge';
 export * from './generate';
 export * from './presets';
 export * from './prompts';

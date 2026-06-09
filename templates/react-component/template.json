@@ -1,0 +1,39 @@
+{
+  "name": "react-component",
+  "title": "React component (merge into your app)",
+  "description": "Adds a typed React component into an existing project and merges the react peer dependency.",
+  "version": "1.0.0",
+  "source": "template",
+  "output": "merge",
+  "nameVar": "component",
+  "prompts": [
+    {
+      "name": "component",
+      "message": "Component name (PascalCase)",
+      "type": "text",
+      "default": "Widget",
+      "token": "NAME",
+      "validate": "nonEmpty"
+    }
+  ],
+  "features": [
+    {
+      "id": "test",
+      "label": "Include a Vitest test file",
+      "type": "boolean",
+      "default": false,
+      "overlay": "features/test",
+      "packageJson": {
+        "devDependencies": {
+          "@testing-library/react": "^16.0.0",
+          "vitest": "^2.1.0"
+        }
+      }
+    }
+  ],
+  "packageJson": {
+    "peerDependencies": { "react": "^18.0.0" }
+  },
+  "detokenize": { "exclude": [] },
+  "nextSteps": ["Import it:  import { __NAME__ } from './src/components/__NAME__';"]
+}

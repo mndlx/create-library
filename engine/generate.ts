@@ -1,19 +1,14 @@
+import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import { resolveEffects } from './features';
 import { copyDir } from './fsx';
 import { runHooks } from './hooks';
+import { MergeReport, mergeTree } from './merge';
 import { applyInjects, overlayDir } from './overlay';
 import { mergePackageJson } from './packageJson';
-import { detokenizeTree, tokenReplace } from './render';
+import { detokenizePaths, detokenizeTree, tokenReplace } from './render';
 import { InjectDef, LoadedTemplate } from './types';
-
-export interface GenerateOptions {
-    template: LoadedTemplate;
-    targetDir: string;
-    answers: Record<string, string>;
-    features?: Record<string, boolean | string>;
-    runPostHooks?: boolean;
-}
 
 export const tokensFromAnswers = (
     template: LoadedTemplate,
@@ -30,19 +25,51 @@ export const tokensFromAnswers = (
 export const nameVarOf = (template: LoadedTemplate): string =>
     template.manifest.nameVar || template.manifest.prompts[0]?.name || 'name';
 
+export const outputModeOf = (template: LoadedTemplate): 'new' | 'merge' =>
+    template.manifest.output === 'merge' ? 'merge' : 'new';
+
+/** Build the fully-resolved template tree into a fresh `stagingDir`. Returns the tokens used. */
+export const assemble = (
+    template: LoadedTemplate,
+    stagingDir: string,
+    answers: Record<string, string>,
+    features: Record<string, boolean | string> = {}
+): Record<string, string> => {
+    const effects = resolveEffects(template, features);
+
+    copyDir(template.sourceDir, stagingDir);
+    for (const effect of effects) {
+        if (effect.overlay) overlayDir(path.join(template.dir, effect.overlay), stagingDir);
+    }
+
+    const injects: InjectDef[] = [];
+    for (const effect of effects) for (const inj of effect.inject ?? []) injects.push(inj);
+    applyInjects(stagingDir, injects);
+
+    mergePackageJson(stagingDir, template.manifest.packageJson);
+    for (const effect of effects) mergePackageJson(stagingDir, effect.packageJson);
+
+    const tokens = tokensFromAnswers(template, answers);
+    for (const effect of effects) Object.assign(tokens, effect.tokens ?? {});
+    detokenizeTree(stagingDir, tokens, template.manifest.detokenize?.exclude ?? []);
+    detokenizePaths(stagingDir, tokens);
+
+    return tokens;
+};
+
+export interface GenerateOptions {
+    template: LoadedTemplate;
+    targetDir: string;
+    answers: Record<string, string>;
+    features?: Record<string, boolean | string>;
+    runPostHooks?: boolean;
+}
+
 export interface GenerateResult {
     tokens: Record<string, string>;
 }
 
-/**
- * Assemble the output:
- *  1. copy the base payload,
- *  2. overlay each active feature, in order,
- *  3. resolve inject markers,
- *  4. merge package.json (base + features),
- *  5. replace tokens across the tree,
- *  6. optionally run post-generate hooks.
- */
+/** "new" mode: create a brand-new project directory from the template. */
 export const generate = ({
     template,
     targetDir,
@@ -50,29 +77,46 @@ export const generate = ({
     features = {},
     runPostHooks,
 }: GenerateOptions): GenerateResult => {
-    const effects = resolveEffects(template, features);
-
-    copyDir(template.sourceDir, targetDir);
-
-    for (const effect of effects) {
-        if (effect.overlay) overlayDir(path.join(template.dir, effect.overlay), targetDir);
-    }
-
-    const injects: InjectDef[] = [];
-    for (const effect of effects) for (const inj of effect.inject ?? []) injects.push(inj);
-    applyInjects(targetDir, injects);
-
-    mergePackageJson(targetDir, template.manifest.packageJson);
-    for (const effect of effects) mergePackageJson(targetDir, effect.packageJson);
-
-    const tokens = tokensFromAnswers(template, answers);
-    for (const effect of effects) Object.assign(tokens, effect.tokens ?? {});
-    detokenizeTree(targetDir, tokens, template.manifest.detokenize?.exclude ?? []);
-
+    const tokens = assemble(template, targetDir, answers, features);
     const hooks = template.manifest.hooks?.postGenerate ?? [];
     if (runPostHooks && hooks.length) runHooks(hooks, targetDir);
-
     return { tokens };
+};
+
+export interface MergeOptions {
+    template: LoadedTemplate;
+    projectDir: string;
+    answers: Record<string, string>;
+    features?: Record<string, boolean | string>;
+    force?: boolean;
+    runPostHooks?: boolean;
+}
+
+export interface MergeResult {
+    tokens: Record<string, string>;
+    report: MergeReport;
+}
+
+/** "merge" mode: integrate the template into an existing project (non-destructive by default). */
+export const mergeInto = ({
+    template,
+    projectDir,
+    answers,
+    features = {},
+    force = false,
+    runPostHooks,
+}: MergeOptions): MergeResult => {
+    const stagingRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'vlcl-'));
+    const staging = path.join(stagingRoot, 'tree');
+    try {
+        const tokens = assemble(template, staging, answers, features);
+        const report = mergeTree(staging, projectDir, { force });
+        const hooks = template.manifest.hooks?.postGenerate ?? [];
+        if (runPostHooks && hooks.length) runHooks(hooks, projectDir);
+        return { tokens, report };
+    } finally {
+        fs.rmSync(stagingRoot, { recursive: true, force: true });
+    }
 };
 
 export const renderNextSteps = (

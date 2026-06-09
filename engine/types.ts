@@ -77,6 +77,8 @@ export interface TemplateManifest {
     source?: string;
     /** Prompt whose answer names the output folder; defaults to the first prompt. */
     nameVar?: string;
+    /** "new" creates a folder; "merge" integrates into an existing project. Default "new". */
+    output?: 'new' | 'merge';
     prompts: PromptDef[];
     /** Configurable, conditional parts of the output. */
     features?: FeatureDef[];

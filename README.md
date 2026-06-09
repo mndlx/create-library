@@ -17,8 +17,10 @@ toggle its features, and writes the configured project into a new folder.
 Flags:
 
 - `--yes` / `-y` — accept defaults, no prompts
-- `--save-preset <file>` — save the chosen answers + features to a preset
-- `--preset <file>` — generate from a saved preset
+- `--save-preset <file>` / `--preset <file>` — save / reuse a configuration
+- `--into <dir>` — target directory (defaults to the current directory)
+- `--merge` / `--new` — force the output mode (otherwise the template decides)
+- `--force` — in merge mode, overwrite conflicting files
 
 ## Back-office
 
@@ -28,11 +30,12 @@ npx virtuallab-create-library-bo
 
 From the menu you can:
 
-- **Configure & generate** — pick a template, choose features, generate now
-- **Configure & save preset** — save a reusable configuration
-- **Generate from preset**
-- **Create template** — scaffold a new template (manifest + payload)
+- **Configure & generate** — pick a template, answer its variables, choose features, generate now
+- **Configure & save preset** / **Generate from preset**
+- **Create template** — scaffold a new template (choose `new` or `merge` output)
+- **Add variable to template** — define a dynamic variable (the field create-library will ask)
 - **Add component to template** — create a component overlay and register it as a feature
+- **Set template output mode** — `new` (folder) or `merge` (integrate)
 - **List / Validate** templates and **register external directories**
 
 ## How a template works
@@ -53,6 +56,22 @@ my-template/
 Generation: copy the base payload → overlay each enabled feature → resolve
 `/* inject:<marker> */` snippets → merge `package.json` (base + features) →
 replace `__TOKEN__` placeholders across every text file → run hooks.
+
+### Output mode
+
+A template declares how it is delivered with `"output"`:
+
+- `"new"` (default) — create a brand-new project folder named after a variable.
+- `"merge"` — integrate the template into an **existing project**: files are copied
+  in (existing files are kept unless `--force`), and the template's dependencies
+  and scripts are merged into the project's `package.json` (name and version are
+  preserved). Run `create-library` from inside the project, or pass `--into <dir>`.
+
+Tokens are replaced in **file contents and in file/directory names**, so a payload
+like `src/components/__NAME__/__NAME__.tsx` becomes `src/components/Card/Card.tsx`.
+
+The bundled `react-component` template is a `merge` example: it asks for a component
+name and adds `src/components/<Name>/` into your app.
 
 ### Manifest
 

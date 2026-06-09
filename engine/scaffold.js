@@ -38,7 +38,7 @@ const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const manifest_1 = require("./manifest");
 /** Create a new template skeleton (manifest + minimal payload). Returns its directory. */
-const scaffoldTemplate = ({ rootDir, name, title, description }) => {
+const scaffoldTemplate = ({ rootDir, name, title, description, output = 'new' }) => {
     const templateDir = path.join(rootDir, name);
     if (fs.existsSync(templateDir))
         throw new Error(`Template already exists: ${templateDir}`);
@@ -50,6 +50,7 @@ const scaffoldTemplate = ({ rootDir, name, title, description }) => {
         description: description || '',
         version: '1.0.0',
         source: 'template',
+        output,
         nameVar: 'name',
         prompts: [
             {

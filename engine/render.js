@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.detokenizeTree = exports.tokenReplace = void 0;
+exports.detokenizePaths = exports.detokenizeTree = exports.tokenReplace = void 0;
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const fsx_1 = require("./fsx");
@@ -61,3 +61,29 @@ const detokenizeTree = (root, tokens, extraExcludePaths = []) => {
     }
 };
 exports.detokenizeTree = detokenizeTree;
+const fsx_2 = require("./fsx");
+/** Rename files and directories whose names contain `__TOKEN__`, deepest first. */
+const detokenizePaths = (root, tokens) => {
+    const entries = [];
+    const walk = (dir) => {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            if (entry.isDirectory() && fsx_2.DEFAULT_EXCLUDE_DIRS.includes(entry.name))
+                continue;
+            const full = path.join(dir, entry.name);
+            entries.push(full);
+            if (entry.isDirectory())
+                walk(full);
+        }
+    };
+    walk(root);
+    entries
+        .sort((a, b) => b.split(path.sep).length - a.split(path.sep).length)
+        .forEach((full) => {
+        const dir = path.dirname(full);
+        const base = path.basename(full);
+        const renamed = (0, exports.tokenReplace)(base, tokens);
+        if (renamed !== base)
+            fs.renameSync(full, path.join(dir, renamed));
+    });
+};
+exports.detokenizePaths = detokenizePaths;

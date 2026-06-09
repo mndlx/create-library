@@ -79,6 +79,9 @@ const validateManifest = (data) => {
     if (m.nextSteps !== undefined && !Array.isArray(m.nextSteps)) {
         errors.push('"nextSteps" must be an array');
     }
+    if (m.output !== undefined && m.output !== 'new' && m.output !== 'merge') {
+        errors.push('"output" must be "new" or "merge"');
+    }
     if (m.features !== undefined) {
         if (!Array.isArray(m.features)) {
             errors.push('"features" must be an array');

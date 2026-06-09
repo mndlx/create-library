@@ -6,9 +6,9 @@ import { PackageJsonPatch } from './types';
 export const mergePackageJson = (projectDir: string, patch?: PackageJsonPatch): void => {
     if (!patch) return;
     const pkgPath = path.join(projectDir, 'package.json');
-    if (!fs.existsSync(pkgPath)) return;
-
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as Record<string, unknown>;
+    const pkg: Record<string, unknown> = fs.existsSync(pkgPath)
+        ? (JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as Record<string, unknown>)
+        : {};
     for (const [key, value] of Object.entries(patch)) {
         if (value && typeof value === 'object' && !Array.isArray(value)) {
             pkg[key] = { ...((pkg[key] as object) || {}), ...(value as object) };

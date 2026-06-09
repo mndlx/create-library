@@ -20,6 +20,7 @@ __exportStar(require("./manifest"), exports);
 __exportStar(require("./registry"), exports);
 __exportStar(require("./features"), exports);
 __exportStar(require("./overlay"), exports);
+__exportStar(require("./merge"), exports);
 __exportStar(require("./generate"), exports);
 __exportStar(require("./presets"), exports);
 __exportStar(require("./prompts"), exports);
