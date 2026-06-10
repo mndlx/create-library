@@ -1,3 +1,4 @@
+import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
 import CodeIcon from '@mui/icons-material/Code';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
@@ -26,6 +27,7 @@ import Typography from '@mui/material/Typography';
 import { useCallback, useEffect, useState } from 'react';
 import { api, type AppState, type FileTarget, type Template } from './api';
 import { AuthorView } from './components/AuthorView';
+import { CreateTemplateDialog } from './components/CreateTemplateDialog';
 import { useDialogs } from './components/dialogs';
 import { EditorView } from './components/EditorView';
 import { GenerateView } from './components/GenerateView';
@@ -41,6 +43,7 @@ export function App() {
     const [view, setView] = useState<View>('editor');
     const [snack, setSnack] = useState<{ msg: string; sev: Severity } | null>(null);
     const [result, setResult] = useState<unknown>(null);
+    const [createOpen, setCreateOpen] = useState(false);
 
     const { prompt } = useDialogs();
     const notify = useCallback((msg: string, sev: Severity = 'info') => setSnack({ msg, sev }), []);
@@ -99,6 +102,9 @@ export function App() {
                             <Tab label="Author" value="author" sx={{ minHeight: 0, py: 1 }} />
                         </Tabs>
                     )}
+                    <Button size="small" startIcon={<AddIcon />} variant="outlined" onClick={() => setCreateOpen(true)} sx={{ mr: 1 }}>
+                        New template
+                    </Button>
                     <Button size="small" startIcon={<FolderOpenIcon />} onClick={openFolder} sx={{ color: 'text.primary' }}>
                         Open folder…
                     </Button>
@@ -110,6 +116,7 @@ export function App() {
                 <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
                     <Stack direction="row" alignItems="center" sx={{ px: 2, py: 1 }}>
                         <Typography variant="overline" color="text.secondary" sx={{ flex: 1 }}>Templates</Typography>
+                        <Tooltip title="New template"><IconButton size="small" color="primary" onClick={() => setCreateOpen(true)}><AddIcon fontSize="small" /></IconButton></Tooltip>
                         <Tooltip title="Refresh"><IconButton size="small" onClick={reload}><RefreshIcon fontSize="small" /></IconButton></Tooltip>
                     </Stack>
                     <Divider />
@@ -127,7 +134,12 @@ export function App() {
                                 />
                             </ListItemButton>
                         ))}
-                        {!state.templates.length && <Typography variant="body2" color="text.secondary" sx={{ px: 2 }}>No templates.</Typography>}
+                        {!state.templates.length && (
+                            <Stack spacing={1} sx={{ px: 2, py: 1 }}>
+                                <Typography variant="body2" color="text.secondary">No templates yet.</Typography>
+                                <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>New template</Button>
+                            </Stack>
+                        )}
                     </List>
                     <Divider />
                     {workspace && (
@@ -171,6 +183,14 @@ export function App() {
                     )}
                 </Box>
             </Box>
+
+            <CreateTemplateDialog
+                open={createOpen}
+                defaultDir={state.cwd}
+                onClose={() => setCreateOpen(false)}
+                notify={notify}
+                onCreated={onCreated}
+            />
 
             <Dialog open={!!result} onClose={() => setResult(null)} maxWidth="md" fullWidth>
                 <DialogTitle>Result</DialogTitle>
