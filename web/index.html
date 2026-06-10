@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>create-library · back-office</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1d212b; --line:#2a2f3a;
+    --text:#e6e8ee; --muted:#9aa3b2; --accent:#39c; --accent2:#4ade80; --warn:#fbbf24; --err:#f87171;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.5 system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text)}
+  header{padding:14px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+  header h1{font-size:15px;margin:0;font-weight:600}
+  header .tag{color:var(--muted);font-size:12px}
+  .wrap{display:grid;grid-template-columns:300px 1fr;gap:0;min-height:calc(100vh - 51px)}
+  aside{border-right:1px solid var(--line);padding:14px;background:var(--panel)}
+  main{padding:20px;max-width:820px}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 10px}
+  .tpl{padding:10px;border:1px solid var(--line);border-radius:8px;margin-bottom:8px;cursor:pointer;background:var(--panel2)}
+  .tpl:hover{border-color:var(--accent)}
+  .tpl.active{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+  .tpl .name{font-weight:600}
+  .tpl .meta{color:var(--muted);font-size:12px}
+  .badge{display:inline-block;font-size:11px;padding:1px 7px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+  .badge.merge{color:var(--warn);border-color:var(--warn)}
+  .badge.new{color:var(--accent2);border-color:var(--accent2)}
+  .tabs{display:flex;gap:6px;margin-bottom:18px}
+  .tabs button{background:var(--panel2);color:var(--muted);border:1px solid var(--line);padding:7px 14px;border-radius:8px;cursor:pointer}
+  .tabs button.active{color:var(--text);border-color:var(--accent)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
+  .card h3{margin:0 0 12px;font-size:14px}
+  label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px}
+  input,select{width:100%;background:var(--bg);border:1px solid var(--line);color:var(--text);padding:8px 10px;border-radius:7px;font:inherit}
+  .row{display:flex;gap:8px;align-items:center}
+  .row input[type=checkbox]{width:auto}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  button.act{background:var(--accent);color:#04121c;border:none;padding:9px 16px;border-radius:8px;font-weight:600;cursor:pointer}
+  button.ghost{background:transparent;color:var(--text);border:1px solid var(--line);padding:9px 16px;border-radius:8px;cursor:pointer}
+  .muted{color:var(--muted)}
+  .feat{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px dashed var(--line)}
+  .feat:last-child{border-bottom:none}
+  pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px;overflow:auto;white-space:pre-wrap;font-size:12.5px}
+  .ok{color:var(--accent2)} .err{color:var(--err)} .warn{color:var(--warn)}
+  .hide{display:none}
+  .dirs{font-size:12px;color:var(--muted);margin-top:14px;word-break:break-all}
+  .help{font-size:12px;color:var(--muted);margin-top:4px}
+</style>
+</head>
+<body>
+<header>
+  <h1>create-library</h1><span class="tag">· back-office</span>
+</header>
+<div class="wrap">
+  <aside>
+    <h2>Templates</h2>
+    <div id="tpls"></div>
+    <button class="ghost" style="width:100%;margin-top:6px" onclick="reload()">Refresh</button>
+    <div class="dirs" id="dirs"></div>
+  </aside>
+  <main>
+    <div class="tabs">
+      <button id="tab-gen" class="active" onclick="tab('gen')">Configure &amp; generate</button>
+      <button id="tab-auth" onclick="tab('auth')">Author</button>
+    </div>
+
+    <section id="panel-gen">
+      <div id="gen-empty" class="muted">Select a template on the left.</div>
+      <div id="gen-form" class="hide"></div>
+    </section>
+
+    <section id="panel-auth" class="hide">
+      <div class="card">
+        <h3>Create template</h3>
+        <div class="grid2">
+          <div><label>Name</label><input id="ct-name" placeholder="my-template"></div>
+          <div><label>Title</label><input id="ct-title" placeholder="My template"></div>
+        </div>
+        <label>Description</label><input id="ct-desc">
+        <div class="grid2">
+          <div><label>Output mode</label>
+            <select id="ct-output"><option value="new">new (creates a folder)</option><option value="merge">merge (into existing project)</option></select></div>
+          <div><label>Create in directory</label><input id="ct-root" placeholder="(a registered templates dir or any path)"></div>
+        </div>
+        <div style="margin-top:12px"><button class="act" onclick="createTemplate()">Create</button></div>
+      </div>
+
+      <div class="card">
+        <h3>Configure selected template <span class="muted" id="auth-sel"></span></h3>
+        <div class="grid2">
+          <div>
+            <label>Add a variable — name</label><input id="av-name" placeholder="apiUrl">
+            <label>Question</label><input id="av-msg" placeholder="API base URL">
+            <div class="grid2">
+              <div><label>Type</label><select id="av-type" onchange="avType()"><option>text</option><option>select</option></select></div>
+              <div><label>Token (__TOKEN__)</label><input id="av-token" placeholder="APIURL"></div>
+            </div>
+            <label>Default</label><input id="av-default">
+            <div id="av-text"><label>Validator</label><select id="av-validate"><option>none</option><option>packageName</option><option>nonEmpty</option></select></div>
+            <div id="av-select" class="hide"><label>Options (comma-separated)</label><input id="av-options" placeholder="dev, prod"></div>
+            <div style="margin-top:10px"><button class="act" onclick="addVariable()">Add variable</button></div>
+          </div>
+          <div>
+            <label>Add a component — name (PascalCase)</label><input id="ac-name" placeholder="Modal">
+            <label class="row"><input type="checkbox" id="ac-default"> <span>included by default</span></label>
+            <div style="margin-top:10px"><button class="act" onclick="addComponent()">Add component</button></div>
+            <hr style="border-color:var(--line);margin:16px 0">
+            <label>Set output mode</label>
+            <div class="row"><select id="so-output"><option value="new">new</option><option value="merge">merge</option></select>
+            <button class="ghost" onclick="setOutput()">Set</button></div>
+            <hr style="border-color:var(--line);margin:16px 0">
+            <label>Register external templates directory</label>
+            <div class="row"><input id="ad-dir" placeholder="C:\\path\\to\\templates"><button class="ghost" onclick="addDir()">Add</button></div>
+            <div style="margin-top:14px"><button class="ghost" onclick="validateTpl()">Validate template</button></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div id="result" class="card hide"><h3>Result</h3><pre id="result-body"></pre></div>
+  </main>
+</div>
+
+<script>
+let STATE = { templates: [], dirs: [], cwd: '' };
+let selected = null;
+
+const $ = (id) => document.getElementById(id);
+async function api(path, body){
+  const opt = body ? { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) } : {};
+  const r = await fetch(path, opt);
+  const data = await r.json();
+  if(!r.ok || data.error) throw new Error(data.error || ('HTTP '+r.status));
+  return data;
+}
+function showResult(obj, cls){
+  $('result').classList.remove('hide');
+  const body = $('result-body'); body.className=''; if(cls) body.classList.add(cls);
+  body.textContent = typeof obj==='string' ? obj : JSON.stringify(obj, null, 2);
+}
+
+async function reload(){
+  STATE = await api('/api/state');
+  renderTemplates();
+  $('dirs').innerHTML = '<b>Template dirs</b><br>' + STATE.dirs.map(d=>'· '+d).join('<br>') + '<br><br><b>cwd</b><br>'+STATE.cwd;
+  if(selected){ selected = STATE.templates.find(t=>t.name===selected.name) || null; }
+  renderGen();
+}
+function renderTemplates(){
+  $('tpls').innerHTML = STATE.templates.map(t=>`
+    <div class="tpl ${selected&&selected.name===t.name?'active':''}" onclick="pick('${t.name}')">
+      <div class="name">${t.name} <span class="badge ${t.output}">${t.output}</span></div>
+      <div class="meta">${t.title||''}</div>
+      <div class="meta">${t.prompts.length} var · ${t.features.length} feat</div>
+    </div>`).join('') || '<div class="muted">No templates.</div>';
+}
+function pick(name){ selected = STATE.templates.find(t=>t.name===name); renderTemplates(); $('auth-sel').textContent = '— '+name; renderGen(); }
+
+function tab(which){
+  $('tab-gen').classList.toggle('active', which==='gen');
+  $('tab-auth').classList.toggle('active', which==='auth');
+  $('panel-gen').classList.toggle('hide', which!=='gen');
+  $('panel-auth').classList.toggle('hide', which!=='auth');
+}
+
+function renderGen(){
+  if(!selected){ $('gen-empty').classList.remove('hide'); $('gen-form').classList.add('hide'); return; }
+  $('gen-empty').classList.add('hide'); $('gen-form').classList.remove('hide');
+  const t = selected;
+  const vars = t.prompts.map(p=>{
+    if(p.type==='select'){
+      return `<label>${p.message}</label><select data-var="${p.name}">${(p.options||[]).map(o=>`<option ${o===p.default?'selected':''}>${o}</option>`).join('')}</select>`;
+    }
+    return `<label>${p.message}</label><input data-var="${p.name}" value="${p.default||''}">`;
+  }).join('');
+  const feats = t.features.map(f=>{
+    if(f.type==='select'){
+      return `<div class="feat"><span>${f.label}</span><select data-feat="${f.id}" style="width:160px">${(f.options||[]).map(o=>`<option ${o===f.default?'selected':''}>${o}</option>`).join('')}</select></div>`;
+    }
+    return `<div class="feat"><span>${f.label}</span><input type="checkbox" data-feat="${f.id}" ${f.default?'checked':''}></div>`;
+  }).join('');
+  $('gen-form').innerHTML = `
+    <div class="card"><h3>${t.title} <span class="badge ${t.output}">${t.output}</span></h3>
+      <div class="muted">${t.description||''}</div>
+      ${vars ? '<h2 style="margin-top:16px">Variables</h2>'+vars : ''}
+      ${feats ? '<h2 style="margin-top:16px">Features</h2>'+feats : '<div class="muted" style="margin-top:10px">No features.</div>'}
+      <h2 style="margin-top:16px">Output</h2>
+      <div class="grid2">
+        <div><label>Mode</label><select id="g-mode"><option value="new" ${t.output==='new'?'selected':''}>new — create folder</option><option value="merge" ${t.output==='merge'?'selected':''}>merge — into existing project</option></select></div>
+        <div><label id="g-into-label">Target directory</label><input id="g-into" placeholder="${STATE.cwd}"></div>
+      </div>
+      <label class="row" style="margin-top:8px"><input type="checkbox" id="g-force"> <span>force overwrite (merge)</span></label>
+      <div style="margin-top:14px;display:flex;gap:8px">
+        <button class="act" onclick="doGenerate()">Generate</button>
+        <button class="ghost" onclick="savePreset()">Save preset…</button>
+      </div>
+    </div>`;
+}
+
+function gather(){
+  const answers = {}, features = {};
+  document.querySelectorAll('[data-var]').forEach(el=> answers[el.dataset.var] = el.value);
+  document.querySelectorAll('[data-feat]').forEach(el=> features[el.dataset.feat] = el.type==='checkbox' ? el.checked : el.value);
+  return { answers, features };
+}
+async function doGenerate(){
+  try{
+    const { answers, features } = gather();
+    const data = await api('/api/generate', {
+      templateName: selected.name, answers, features,
+      mode: $('g-mode').value, into: $('g-into').value || undefined, force: $('g-force').checked
+    });
+    showResult(data, 'ok');
+    reload();
+  }catch(e){ showResult('Error: '+e.message, 'err'); }
+}
+async function savePreset(){
+  try{
+    const file = prompt('Save preset to file:', selected.name+'.preset.json'); if(!file) return;
+    const { answers, features } = gather();
+    const data = await api('/api/preset', { templateName: selected.name, answers, features, file });
+    showResult('Saved preset to '+data.file, 'ok');
+  }catch(e){ showResult('Error: '+e.message, 'err'); }
+}
+
+async function createTemplate(){
+  try{
+    const data = await api('/api/create-template', {
+      name: $('ct-name').value, title: $('ct-title').value, description: $('ct-desc').value,
+      output: $('ct-output').value, rootDir: $('ct-root').value || STATE.dirs[0]
+    });
+    showResult('Created template at '+data.dir, 'ok'); reload();
+  }catch(e){ showResult('Error: '+e.message, 'err'); }
+}
+function avType(){ const sel = $('av-type').value==='select'; $('av-select').classList.toggle('hide', !sel); $('av-text').classList.toggle('hide', sel); }
+async function addVariable(){
+  if(!selected) return showResult('Select a template first.', 'warn');
+  try{
+    const type = $('av-type').value;
+    const prompt = { name:$('av-name').value, message:$('av-msg').value, type, token:$('av-token').value||undefined };
+    if($('av-default').value) prompt.default = $('av-default').value;
+    if(type==='select') prompt.options = $('av-options').value.split(',').map(s=>s.trim()).filter(Boolean);
+    else prompt.validate = $('av-validate').value;
+    await api('/api/add-variable', { templateName: selected.name, prompt });
+    showResult('Added variable "'+prompt.name+'".', 'ok'); reload();
+  }catch(e){ showResult('Error: '+e.message, 'err'); }
+}
+async function addComponent(){
+  if(!selected) return showResult('Select a template first.', 'warn');
+  try{ await api('/api/add-component', { templateName: selected.name, component:$('ac-name').value, default:$('ac-default').checked });
+    showResult('Added component "'+$('ac-name').value+'".', 'ok'); reload();
+  }catch(e){ showResult('Error: '+e.message, 'err'); }
+}
+async function setOutput(){
+  if(!selected) return showResult('Select a template first.', 'warn');
+  try{ await api('/api/set-output', { templateName: selected.name, output:$('so-output').value });
+    showResult('Output mode set to '+$('so-output').value+'.', 'ok'); reload();
+  }catch(e){ showResult('Error: '+e.message, 'err'); }
+}
+async function addDir(){
+  try{ const data = await api('/api/add-dir', { dir:$('ad-dir').value }); showResult('Registered '+data.dir, 'ok'); reload(); }
+  catch(e){ showResult('Error: '+e.message, 'err'); }
+}
+async function validateTpl(){
+  if(!selected) return showResult('Select a template first.', 'warn');
+  try{ const data = await api('/api/validate', { templateName: selected.name });
+    showResult(data.errors.length ? ('Invalid:\n - '+data.errors.join('\n - ')) : 'Template is valid.', data.errors.length?'err':'ok');
+  }catch(e){ showResult('Error: '+e.message, 'err'); }
+}
+reload();
+</script>
+</body>
+</html>

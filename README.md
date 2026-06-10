@@ -28,6 +28,14 @@ Flags:
 npx virtuallab-create-library-bo
 ```
 
+A **web** back-office is also available — same capabilities in the browser:
+
+```bash
+npm run bo:web        # or: npx virtuallab-create-library-bo-web
+```
+
+It starts a local server on http://localhost:4317 and opens it automatically.
+
 From the menu you can:
 
 - **Configure & generate** — pick a template, answer its variables, choose features, generate now

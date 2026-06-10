@@ -10,16 +10,19 @@
     "dev": "node ./bin/generate.js",
     "bo": "node ./bin/bo.js",
     "prepublishOnly": "tsc",
-    "deploy": "yarn run build && yarn publish"
+    "deploy": "yarn run build && yarn publish",
+    "bo:web": "node ./bin/bo-web.js"
   },
   "bin": {
     "virtuallab-create-library": "bin/generate.js",
-    "virtuallab-create-library-bo": "bin/bo.js"
+    "virtuallab-create-library-bo": "bin/bo.js",
+    "virtuallab-create-library-bo-web": "bin/bo-web.js"
   },
   "files": [
     "bin",
     "engine",
-    "templates"
+    "templates",
+    "web"
   ],
   "dependencies": {
     "@virtual-registry/mandolin": "^1.1.9"
