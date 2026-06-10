@@ -173,6 +173,7 @@ export function GuideDialog({ open, onClose, onNewTemplate }: Props) {
                         <li><b>Author</b> — add variables (<code>__TOKEN__</code>) and components.</li>
                         <li><b>Generate</b> — produce a new project, or merge into an existing one.</li>
                         <li><b>Open folder…</b> — edit any directory directly, no manifest needed.</li>
+                        <li><b>Payload layout</b> — a template can keep files in a <code>template/</code> subfolder, or flat at its root. For flat templates the <code>template.json</code> is left out of the output unless you tick “Include manifest files” in Generate.</li>
                     </ul>
                 </Typography>
             </DialogContent>

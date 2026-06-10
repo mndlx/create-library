@@ -183,13 +183,14 @@ async function handleApi(req, res, pathname, query) {
         const features = body.features || {};
         const mode = body.mode || (0, engine_1.outputModeOf)(t);
         const into = path.resolve(body.into || process.cwd());
+        const includeManifest = !!body.includeManifest;
         if (mode === 'merge') {
-            const { tokens, report } = (0, engine_1.mergeInto)({ template: t, projectDir: into, answers, features, force: !!body.force });
+            const { tokens, report } = (0, engine_1.mergeInto)({ template: t, projectDir: into, answers, features, force: !!body.force, includeManifest });
             return sendJson(res, 200, { ok: true, mode, into, report, nextSteps: (0, engine_1.renderNextSteps)(t, tokens) });
         }
         const name = answers[(0, engine_1.nameVarOf)(t)] || t.manifest.name;
         const targetDir = path.join(into, name);
-        const { tokens } = (0, engine_1.generate)({ template: t, targetDir, answers, features });
+        const { tokens } = (0, engine_1.generate)({ template: t, targetDir, answers, features, includeManifest });
         return sendJson(res, 200, { ok: true, mode, targetDir, nextSteps: (0, engine_1.renderNextSteps)(t, tokens) });
     }
     if (req.method === 'POST' && pathname === '/api/preset') {
@@ -210,6 +211,7 @@ async function handleApi(req, res, pathname, query) {
             title: body.title,
             description: body.description,
             output: body.output === 'merge' ? 'merge' : 'new',
+            source: body.source === '.' ? '.' : 'template',
         });
         // Make the new template discoverable by registering its parent directory.
         if (!(0, engine_1.resolveTemplateDirs)().includes(rootDir))

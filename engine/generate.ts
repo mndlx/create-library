@@ -7,8 +7,15 @@ import { runHooks } from './hooks';
 import { MergeReport, mergeTree } from './merge';
 import { applyInjects, overlayDir } from './overlay';
 import { mergePackageJson } from './packageJson';
+import { MANIFEST_FILENAME } from './manifest';
 import { detokenizePaths, detokenizeTree, tokenReplace } from './render';
 import { InjectDef, LoadedTemplate } from './types';
+
+/**
+ * Authoring-only files that must not end up in generated output when the payload
+ * lives at the template root (i.e. there is no separate `template/` subfolder).
+ */
+const PROPRIETARY_ENTRIES = [MANIFEST_FILENAME, 'features'];
 
 export const tokensFromAnswers = (
     template: LoadedTemplate,
@@ -33,11 +40,22 @@ export const assemble = (
     template: LoadedTemplate,
     stagingDir: string,
     answers: Record<string, string>,
-    features: Record<string, boolean | string> = {}
+    features: Record<string, boolean | string> = {},
+    includeManifest = false
 ): Record<string, string> => {
     const effects = resolveEffects(template, features);
 
     copyDir(template.sourceDir, stagingDir);
+
+    // When the payload is the template root (no `template/` subfolder), the
+    // authoring files were copied too — drop them unless the caller opts in.
+    const payloadIsRoot = path.resolve(template.sourceDir) === path.resolve(template.dir);
+    if (payloadIsRoot && !includeManifest) {
+        for (const entry of PROPRIETARY_ENTRIES) {
+            fs.rmSync(path.join(stagingDir, entry), { recursive: true, force: true });
+        }
+    }
+
     for (const effect of effects) {
         if (effect.overlay) overlayDir(path.join(template.dir, effect.overlay), stagingDir);
     }
@@ -63,6 +81,8 @@ export interface GenerateOptions {
     answers: Record<string, string>;
     features?: Record<string, boolean | string>;
     runPostHooks?: boolean;
+    /** Keep authoring files (template.json, features/) in the output. Default false. */
+    includeManifest?: boolean;
 }
 
 export interface GenerateResult {
@@ -76,8 +96,9 @@ export const generate = ({
     answers,
     features = {},
     runPostHooks,
+    includeManifest = false,
 }: GenerateOptions): GenerateResult => {
-    const tokens = assemble(template, targetDir, answers, features);
+    const tokens = assemble(template, targetDir, answers, features, includeManifest);
     const hooks = template.manifest.hooks?.postGenerate ?? [];
     if (runPostHooks && hooks.length) runHooks(hooks, targetDir);
     return { tokens };
@@ -90,6 +111,8 @@ export interface MergeOptions {
     features?: Record<string, boolean | string>;
     force?: boolean;
     runPostHooks?: boolean;
+    /** Keep authoring files (template.json, features/) in the output. Default false. */
+    includeManifest?: boolean;
 }
 
 export interface MergeResult {
@@ -105,11 +128,12 @@ export const mergeInto = ({
     features = {},
     force = false,
     runPostHooks,
+    includeManifest = false,
 }: MergeOptions): MergeResult => {
     const stagingRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'vlcl-'));
     const staging = path.join(stagingRoot, 'tree');
     try {
-        const tokens = assemble(template, staging, answers, features);
+        const tokens = assemble(template, staging, answers, features, includeManifest);
         const report = mergeTree(staging, projectDir, { force });
         const hooks = template.manifest.hooks?.postGenerate ?? [];
         if (runPostHooks && hooks.length) runHooks(hooks, projectDir);

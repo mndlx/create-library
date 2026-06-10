@@ -10,14 +10,20 @@ export interface ScaffoldOptions {
     title?: string;
     description?: string;
     output?: 'new' | 'merge';
+    /**
+     * Payload location relative to the template. "template" (default) nests files
+     * in a `template/` subfolder; "." puts them at the template root (flat), in
+     * which case the manifest is stripped from generated output by default.
+     */
+    source?: string;
 }
 
 /** Create a new template skeleton (manifest + minimal payload). Returns its directory. */
-export const scaffoldTemplate = ({ rootDir, name, title, description, output = 'new' }: ScaffoldOptions): string => {
+export const scaffoldTemplate = ({ rootDir, name, title, description, output = 'new', source = 'template' }: ScaffoldOptions): string => {
     const templateDir = path.join(rootDir, name);
     if (fs.existsSync(templateDir)) throw new Error(`Template already exists: ${templateDir}`);
 
-    const payloadDir = path.join(templateDir, 'template');
+    const payloadDir = path.join(templateDir, source);
     fs.mkdirSync(payloadDir, { recursive: true });
 
     const manifest: TemplateManifest = {
@@ -25,7 +31,7 @@ export const scaffoldTemplate = ({ rootDir, name, title, description, output = '
         title: title || name,
         description: description || '',
         version: '1.0.0',
-        source: 'template',
+        source,
         output,
         nameVar: 'name',
         prompts: [

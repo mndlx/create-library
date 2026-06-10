@@ -43,7 +43,13 @@ const hooks_1 = require("./hooks");
 const merge_1 = require("./merge");
 const overlay_1 = require("./overlay");
 const packageJson_1 = require("./packageJson");
+const manifest_1 = require("./manifest");
 const render_1 = require("./render");
+/**
+ * Authoring-only files that must not end up in generated output when the payload
+ * lives at the template root (i.e. there is no separate `template/` subfolder).
+ */
+const PROPRIETARY_ENTRIES = [manifest_1.MANIFEST_FILENAME, 'features'];
 const tokensFromAnswers = (template, answers) => {
     const tokens = {};
     for (const prompt of template.manifest.prompts) {
@@ -58,9 +64,17 @@ exports.nameVarOf = nameVarOf;
 const outputModeOf = (template) => template.manifest.output === 'merge' ? 'merge' : 'new';
 exports.outputModeOf = outputModeOf;
 /** Build the fully-resolved template tree into a fresh `stagingDir`. Returns the tokens used. */
-const assemble = (template, stagingDir, answers, features = {}) => {
+const assemble = (template, stagingDir, answers, features = {}, includeManifest = false) => {
     const effects = (0, features_1.resolveEffects)(template, features);
     (0, fsx_1.copyDir)(template.sourceDir, stagingDir);
+    // When the payload is the template root (no `template/` subfolder), the
+    // authoring files were copied too — drop them unless the caller opts in.
+    const payloadIsRoot = path.resolve(template.sourceDir) === path.resolve(template.dir);
+    if (payloadIsRoot && !includeManifest) {
+        for (const entry of PROPRIETARY_ENTRIES) {
+            fs.rmSync(path.join(stagingDir, entry), { recursive: true, force: true });
+        }
+    }
     for (const effect of effects) {
         if (effect.overlay)
             (0, overlay_1.overlayDir)(path.join(template.dir, effect.overlay), stagingDir);
@@ -82,8 +96,8 @@ const assemble = (template, stagingDir, answers, features = {}) => {
 };
 exports.assemble = assemble;
 /** "new" mode: create a brand-new project directory from the template. */
-const generate = ({ template, targetDir, answers, features = {}, runPostHooks, }) => {
-    const tokens = (0, exports.assemble)(template, targetDir, answers, features);
+const generate = ({ template, targetDir, answers, features = {}, runPostHooks, includeManifest = false, }) => {
+    const tokens = (0, exports.assemble)(template, targetDir, answers, features, includeManifest);
     const hooks = template.manifest.hooks?.postGenerate ?? [];
     if (runPostHooks && hooks.length)
         (0, hooks_1.runHooks)(hooks, targetDir);
@@ -91,11 +105,11 @@ const generate = ({ template, targetDir, answers, features = {}, runPostHooks, }
 };
 exports.generate = generate;
 /** "merge" mode: integrate the template into an existing project (non-destructive by default). */
-const mergeInto = ({ template, projectDir, answers, features = {}, force = false, runPostHooks, }) => {
+const mergeInto = ({ template, projectDir, answers, features = {}, force = false, runPostHooks, includeManifest = false, }) => {
     const stagingRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'vlcl-'));
     const staging = path.join(stagingRoot, 'tree');
     try {
-        const tokens = (0, exports.assemble)(template, staging, answers, features);
+        const tokens = (0, exports.assemble)(template, staging, answers, features, includeManifest);
         const report = (0, merge_1.mergeTree)(staging, projectDir, { force });
         const hooks = template.manifest.hooks?.postGenerate ?? [];
         if (runPostHooks && hooks.length)

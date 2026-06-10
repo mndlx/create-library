@@ -28,6 +28,7 @@ export function GenerateView({ template, state, notify, onResult }: Props) {
     const [mode, setMode] = useState<OutputMode>(template.output);
     const [into, setInto] = useState('');
     const [force, setForce] = useState(false);
+    const [includeManifest, setIncludeManifest] = useState(false);
 
     useEffect(() => {
         setAnswers(Object.fromEntries(template.prompts.map((p) => [p.name, p.default ?? ''])));
@@ -35,11 +36,12 @@ export function GenerateView({ template, state, notify, onResult }: Props) {
         setMode(template.output);
         setInto('');
         setForce(false);
+        setIncludeManifest(false);
     }, [template]);
 
     const generate = async () => {
         try {
-            const r = await api.generate({ templateName: template.name, answers, features, mode, into: into || undefined, force });
+            const r = await api.generate({ templateName: template.name, answers, features, mode, into: into || undefined, force, includeManifest });
             onResult(r);
             notify('Generated', 'success');
         } catch (e) {
@@ -140,6 +142,14 @@ export function GenerateView({ template, state, notify, onResult }: Props) {
                     {mode === 'merge' && (
                         <FormControlLabel control={<Checkbox checked={force} onChange={(e) => setForce(e.target.checked)} />} label="Force overwrite" sx={{ mt: 1 }} />
                     )}
+                    <FormControlLabel
+                        control={<Checkbox checked={includeManifest} onChange={(e) => setIncludeManifest(e.target.checked)} />}
+                        label="Include manifest files (template.json, features/) in output"
+                        sx={{ display: 'block' }}
+                    />
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                        Only relevant for flat templates (payload at the template root). Off by default so authoring files don't leak into the output.
+                    </Typography>
                     <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
                         <Button variant="contained" onClick={generate}>Generate</Button>
                         <Button variant="outlined" onClick={savePreset}>Save preset…</Button>

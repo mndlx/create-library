@@ -23,11 +23,12 @@ export function CreateTemplateDialog({ open, defaultDir, onClose, notify, onCrea
     const [description, setDescription] = useState('');
     const [output, setOutput] = useState<OutputMode>('new');
     const [rootDir, setRootDir] = useState('');
+    const [layout, setLayout] = useState<'template' | '.'>('template');
     const [busy, setBusy] = useState(false);
 
     useEffect(() => {
         if (open) {
-            setName(''); setTitle(''); setDescription(''); setOutput('new'); setRootDir('');
+            setName(''); setTitle(''); setDescription(''); setOutput('new'); setRootDir(''); setLayout('template');
             setBusy(false);
         }
     }, [open]);
@@ -36,7 +37,7 @@ export function CreateTemplateDialog({ open, defaultDir, onClose, notify, onCrea
         if (!name.trim()) return notify('A template name is required', 'error');
         setBusy(true);
         try {
-            const r = await api.createTemplate({ name: name.trim(), title, description, output, rootDir: rootDir || defaultDir });
+            const r = await api.createTemplate({ name: name.trim(), title, description, output, rootDir: rootDir || defaultDir, source: layout });
             notify(`Template created at ${r.dir}`, 'success');
             onCreated(r.name);
             onClose();
@@ -63,6 +64,16 @@ export function CreateTemplateDialog({ open, defaultDir, onClose, notify, onCrea
                     <TextField select size="small" label="Output mode" value={output} onChange={(e) => setOutput(e.target.value as OutputMode)}>
                         <MenuItem value="new">new — creates a folder</MenuItem>
                         <MenuItem value="merge">merge — into an existing project</MenuItem>
+                    </TextField>
+                    <TextField
+                        select size="small" label="Payload layout" value={layout}
+                        onChange={(e) => setLayout(e.target.value as 'template' | '.')}
+                        helperText={layout === 'template'
+                            ? 'Files live in a template/ subfolder (manifest stays separate).'
+                            : 'Files live at the template root; manifest is excluded from output unless you opt in.'}
+                    >
+                        <MenuItem value="template">template/ subfolder</MenuItem>
+                        <MenuItem value=".">flat — payload at template root</MenuItem>
                     </TextField>
                     <TextField
                         size="small" label="Create in directory" placeholder={defaultDir}

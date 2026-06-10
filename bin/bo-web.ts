@@ -187,13 +187,15 @@ async function handleApi(
         const mode = body.mode || outputModeOf(t);
         const into = path.resolve(body.into || process.cwd());
 
+        const includeManifest = !!body.includeManifest;
+
         if (mode === 'merge') {
-            const { tokens, report } = mergeInto({ template: t, projectDir: into, answers, features, force: !!body.force });
+            const { tokens, report } = mergeInto({ template: t, projectDir: into, answers, features, force: !!body.force, includeManifest });
             return sendJson(res, 200, { ok: true, mode, into, report, nextSteps: renderNextSteps(t, tokens) });
         }
         const name = answers[nameVarOf(t)] || t.manifest.name;
         const targetDir = path.join(into, name);
-        const { tokens } = generate({ template: t, targetDir, answers, features });
+        const { tokens } = generate({ template: t, targetDir, answers, features, includeManifest });
         return sendJson(res, 200, { ok: true, mode, targetDir, nextSteps: renderNextSteps(t, tokens) });
     }
 
@@ -215,6 +217,7 @@ async function handleApi(
             title: body.title,
             description: body.description,
             output: body.output === 'merge' ? 'merge' : 'new',
+            source: body.source === '.' ? '.' : 'template',
         });
         // Make the new template discoverable by registering its parent directory.
         if (!resolveTemplateDirs().includes(rootDir)) addTemplateDir(rootDir);

@@ -73,12 +73,13 @@ export const api = {
         mode: OutputMode;
         into?: string;
         force?: boolean;
+        includeManifest?: boolean;
     }) => req<{ targetDir?: string; into?: string; report?: unknown; nextSteps: string[] }>('/api/generate', p),
 
     savePreset: (p: { templateName: string; answers: Record<string, string>; features: Record<string, boolean | string>; file: string }) =>
         req<{ file: string }>('/api/preset', p),
 
-    createTemplate: (p: { name: string; title: string; description: string; output: OutputMode; rootDir: string }) =>
+    createTemplate: (p: { name: string; title: string; description: string; output: OutputMode; rootDir: string; source?: '.' | 'template' }) =>
         req<{ dir: string; name: string }>('/api/create-template', p),
 
     addVariable: (p: { templateName: string; prompt: PromptDef }) => req<{ ok: true }>('/api/add-variable', p),

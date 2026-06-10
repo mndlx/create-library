@@ -38,18 +38,18 @@ const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const manifest_1 = require("./manifest");
 /** Create a new template skeleton (manifest + minimal payload). Returns its directory. */
-const scaffoldTemplate = ({ rootDir, name, title, description, output = 'new' }) => {
+const scaffoldTemplate = ({ rootDir, name, title, description, output = 'new', source = 'template' }) => {
     const templateDir = path.join(rootDir, name);
     if (fs.existsSync(templateDir))
         throw new Error(`Template already exists: ${templateDir}`);
-    const payloadDir = path.join(templateDir, 'template');
+    const payloadDir = path.join(templateDir, source);
     fs.mkdirSync(payloadDir, { recursive: true });
     const manifest = {
         name,
         title: title || name,
         description: description || '',
         version: '1.0.0',
-        source: 'template',
+        source,
         output,
         nameVar: 'name',
         prompts: [
