@@ -1,0 +1,13 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "bo-web",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["./bin/bo-web.js"],
+      "port": 4317,
+      "autoPort": true,
+      "env": { "NO_OPEN": "1" }
+    }
+  ]
+}

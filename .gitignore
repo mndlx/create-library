@@ -6,3 +6,4 @@ desktop.ini
 *.log
 
 package-lock.json
+*.tsbuildinfo

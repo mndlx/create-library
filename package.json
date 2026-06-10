@@ -11,7 +11,9 @@
     "bo": "node ./bin/bo.js",
     "prepublishOnly": "tsc",
     "deploy": "yarn run build && yarn publish",
-    "bo:web": "node ./bin/bo-web.js"
+    "bo:web": "node ./bin/bo-web.js",
+    "bo:web:ui": "yarn --cwd bo-web dev",
+    "bo:web:build": "yarn --cwd bo-web install && yarn --cwd bo-web build"
   },
   "bin": {
     "virtuallab-create-library": "bin/generate.js",

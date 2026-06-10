@@ -78,6 +78,57 @@ const requireTemplate = (name) => {
         throw new Error(`Unknown template: ${name}`);
     return t;
 };
+/** Resolve a template-relative path, refusing anything that escapes the template dir. */
+const safeJoin = (baseDir, rel) => {
+    const full = path.resolve(baseDir, rel || '.');
+    const base = path.resolve(baseDir);
+    if (full !== base && !full.startsWith(base + path.sep)) {
+        throw new Error(`Path escapes template: ${rel}`);
+    }
+    return full;
+};
+const IGNORED_DIRS = new Set(['node_modules', '.git', 'dist', '.vs']);
+/** Recursively list a template's files as a tree (dirs first, alphabetical). */
+const buildTree = (baseDir, dir) => {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    const nodes = [];
+    for (const e of entries) {
+        if (e.isDirectory() && IGNORED_DIRS.has(e.name))
+            continue;
+        const full = path.join(dir, e.name);
+        const rel = path.relative(baseDir, full).split(path.sep).join('/');
+        if (e.isDirectory()) {
+            nodes.push({ name: e.name, path: rel, type: 'dir', children: buildTree(baseDir, full) });
+        }
+        else {
+            nodes.push({ name: e.name, path: rel, type: 'file' });
+        }
+    }
+    nodes.sort((a, b) => a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'dir' ? -1 : 1);
+    return nodes;
+};
+const isProbablyBinary = (buf) => {
+    const len = Math.min(buf.length, 8000);
+    for (let i = 0; i < len; i++)
+        if (buf[i] === 0)
+            return true;
+    return false;
+};
+/**
+ * Resolve the base directory the file APIs operate inside. Either a registered
+ * template (by name) or an arbitrary `root` directory ("open a workspace").
+ */
+const resolveBase = (q) => {
+    if (q.root && q.root.trim()) {
+        const dir = path.resolve(q.root.trim());
+        if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory())
+            throw new Error(`Not a directory: ${dir}`);
+        return dir;
+    }
+    if (q.template && q.template.trim())
+        return requireTemplate(q.template).dir;
+    throw new Error('Provide a "template" or a "root" directory');
+};
 const componentTsx = (name) => `import * as React from 'react';\n\n` +
     `export interface ${name}Props extends React.HTMLAttributes<HTMLDivElement> {}\n\n` +
     `export const ${name} = React.forwardRef<HTMLDivElement, ${name}Props>((props, ref) => (\n` +
@@ -117,7 +168,7 @@ function addComponent(t, rawName, onByDefault) {
         throw new Error(errors.join('; '));
     (0, engine_1.writeRawManifest)(t.dir, m);
 }
-async function handleApi(req, res, pathname) {
+async function handleApi(req, res, pathname, query) {
     if (req.method === 'GET' && pathname === '/api/state') {
         return sendJson(res, 200, {
             templates: (0, engine_1.listTemplates)().map(serialize),
@@ -148,16 +199,22 @@ async function handleApi(req, res, pathname) {
         return sendJson(res, 200, { ok: true, file });
     }
     if (req.method === 'POST' && pathname === '/api/create-template') {
-        const rootDir = path.resolve(body.rootDir);
+        const name = String(body.name || '').trim();
+        if (!name)
+            throw new Error('A template name is required');
+        const rootDir = path.resolve(body.rootDir && String(body.rootDir).trim() ? body.rootDir : process.cwd());
         fs.mkdirSync(rootDir, { recursive: true });
         const dir = (0, engine_1.scaffoldTemplate)({
             rootDir,
-            name: body.name,
+            name,
             title: body.title,
             description: body.description,
             output: body.output === 'merge' ? 'merge' : 'new',
         });
-        return sendJson(res, 200, { ok: true, dir });
+        // Make the new template discoverable by registering its parent directory.
+        if (!(0, engine_1.resolveTemplateDirs)().includes(rootDir))
+            (0, engine_1.addTemplateDir)(rootDir);
+        return sendJson(res, 200, { ok: true, dir, name });
     }
     if (req.method === 'POST' && pathname === '/api/add-variable') {
         const t = requireTemplate(body.templateName);
@@ -188,9 +245,78 @@ async function handleApi(req, res, pathname) {
         const t = requireTemplate(body.templateName);
         return sendJson(res, 200, { ok: true, errors: (0, engine_1.validateManifest)((0, engine_1.readRawManifest)(t.dir)) });
     }
+    // ---- File explorer / editor APIs (operate inside a template's directory) ----
+    if (req.method === 'GET' && pathname === '/api/files') {
+        const base = resolveBase(query);
+        return sendJson(res, 200, { ok: true, root: base, tree: buildTree(base, base) });
+    }
+    if (req.method === 'GET' && pathname === '/api/file') {
+        const base = resolveBase(query);
+        const full = safeJoin(base, query.path || '');
+        if (!fs.existsSync(full) || !fs.statSync(full).isFile())
+            throw new Error('File not found');
+        const buf = fs.readFileSync(full);
+        if (isProbablyBinary(buf))
+            return sendJson(res, 200, { ok: true, binary: true, content: '' });
+        return sendJson(res, 200, { ok: true, binary: false, content: buf.toString('utf8') });
+    }
+    if (req.method === 'POST' && pathname === '/api/file/save') {
+        const base = resolveBase({ template: body.templateName, root: body.root });
+        const full = safeJoin(base, body.path || '');
+        fs.mkdirSync(path.dirname(full), { recursive: true });
+        fs.writeFileSync(full, String(body.content ?? ''));
+        return sendJson(res, 200, { ok: true });
+    }
+    if (req.method === 'POST' && pathname === '/api/file/create') {
+        const base = resolveBase({ template: body.templateName, root: body.root });
+        const full = safeJoin(base, body.path || '');
+        if (fs.existsSync(full))
+            throw new Error('Already exists');
+        if (body.dir) {
+            fs.mkdirSync(full, { recursive: true });
+        }
+        else {
+            fs.mkdirSync(path.dirname(full), { recursive: true });
+            fs.writeFileSync(full, String(body.content ?? ''));
+        }
+        return sendJson(res, 200, { ok: true });
+    }
+    if (req.method === 'POST' && pathname === '/api/file/delete') {
+        const base = resolveBase({ template: body.templateName, root: body.root });
+        const full = safeJoin(base, body.path || '');
+        if (full === path.resolve(base))
+            throw new Error('Refusing to delete the workspace root');
+        fs.rmSync(full, { recursive: true, force: true });
+        return sendJson(res, 200, { ok: true });
+    }
+    if (req.method === 'POST' && pathname === '/api/file/rename') {
+        const base = resolveBase({ template: body.templateName, root: body.root });
+        const from = safeJoin(base, body.from || '');
+        const to = safeJoin(base, body.to || '');
+        if (!fs.existsSync(from))
+            throw new Error('Source not found');
+        if (fs.existsSync(to))
+            throw new Error('Target already exists');
+        fs.mkdirSync(path.dirname(to), { recursive: true });
+        fs.renameSync(from, to);
+        return sendJson(res, 200, { ok: true });
+    }
     sendJson(res, 404, { error: 'Not found' });
 }
-const CONTENT_TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
+const CONTENT_TYPES = {
+    '.html': 'text/html',
+    '.js': 'text/javascript',
+    '.mjs': 'text/javascript',
+    '.css': 'text/css',
+    '.json': 'application/json',
+    '.svg': 'image/svg+xml',
+    '.map': 'application/json',
+    '.woff': 'font/woff',
+    '.woff2': 'font/woff2',
+    '.ttf': 'font/ttf',
+    '.png': 'image/png',
+    '.ico': 'image/x-icon',
+};
 function serveStatic(res, pathname) {
     const rel = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
     const full = path.join(WEB_DIR, rel);
@@ -205,7 +331,8 @@ function serveStatic(res, pathname) {
 const server = http.createServer((req, res) => {
     const url = new URL(req.url || '/', 'http://localhost');
     if (url.pathname.startsWith('/api/')) {
-        handleApi(req, res, url.pathname).catch((e) => sendJson(res, 400, { error: e.message }));
+        const query = Object.fromEntries(url.searchParams.entries());
+        handleApi(req, res, url.pathname, query).catch((e) => sendJson(res, 400, { error: e.message }));
         return;
     }
     serveStatic(res, url.pathname);
