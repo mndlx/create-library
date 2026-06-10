@@ -2,6 +2,7 @@ import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
 import CodeIcon from '@mui/icons-material/Code';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import AppBar from '@mui/material/AppBar';
 import Box from '@mui/material/Box';
@@ -28,6 +29,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, type AppState, type FileTarget, type Template } from './api';
 import { AuthorView } from './components/AuthorView';
 import { CreateTemplateDialog } from './components/CreateTemplateDialog';
+import { GuideDialog } from './components/GuideDialog';
 import { useDialogs } from './components/dialogs';
 import { EditorView } from './components/EditorView';
 import { GenerateView } from './components/GenerateView';
@@ -44,6 +46,19 @@ export function App() {
     const [snack, setSnack] = useState<{ msg: string; sev: Severity } | null>(null);
     const [result, setResult] = useState<unknown>(null);
     const [createOpen, setCreateOpen] = useState(false);
+    const [guideOpen, setGuideOpen] = useState(false);
+
+    // Show the guide automatically on the first visit.
+    useEffect(() => {
+        try {
+            if (!localStorage.getItem('bo-guide-seen')) {
+                setGuideOpen(true);
+                localStorage.setItem('bo-guide-seen', '1');
+            }
+        } catch {
+            /* storage blocked — skip */
+        }
+    }, []);
 
     const { prompt } = useDialogs();
     const notify = useCallback((msg: string, sev: Severity = 'info') => setSnack({ msg, sev }), []);
@@ -108,6 +123,9 @@ export function App() {
                     <Button size="small" startIcon={<FolderOpenIcon />} onClick={openFolder} sx={{ color: 'text.primary' }}>
                         Open folder…
                     </Button>
+                    <Tooltip title="Guide">
+                        <IconButton size="small" onClick={() => setGuideOpen(true)} sx={{ ml: 0.5 }}><HelpOutlineIcon fontSize="small" /></IconButton>
+                    </Tooltip>
                 </Toolbar>
             </AppBar>
 
@@ -172,6 +190,7 @@ export function App() {
                     ) : !template ? (
                         <Box sx={{ p: 4, color: 'text.secondary', height: '100%', overflow: 'auto' }}>
                             <Typography sx={{ mb: 1 }}>No template selected. Create one below, register a templates directory, or use “Open folder…” to edit any workspace.</Typography>
+                            <Button variant="outlined" size="small" startIcon={<HelpOutlineIcon />} onClick={() => setGuideOpen(true)} sx={{ mb: 2 }}>Open the guide</Button>
                             <AuthorView template={null} state={state} notify={notify} reload={reload} onCreated={onCreated} />
                         </Box>
                     ) : view === 'editor' && editorTarget ? (
@@ -191,6 +210,8 @@ export function App() {
                 notify={notify}
                 onCreated={onCreated}
             />
+
+            <GuideDialog open={guideOpen} onClose={() => setGuideOpen(false)} onNewTemplate={() => setCreateOpen(true)} />
 
             <Dialog open={!!result} onClose={() => setResult(null)} maxWidth="md" fullWidth>
                 <DialogTitle>Result</DialogTitle>
