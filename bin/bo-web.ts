@@ -26,7 +26,7 @@ const PORT = Number(process.env.PORT) || 4517;
 const WEB_DIR = path.join(__dirname, '..', 'web');
 
 const sendJson = (res: http.ServerResponse, code: number, data: unknown) => {
-    res.writeHead(code, { 'Content-Type': 'application/json' });
+    res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
     res.end(JSON.stringify(data));
 };
 
@@ -336,7 +336,14 @@ function serveStatic(res: http.ServerResponse, pathname: string): void {
         res.end('Not found');
         return;
     }
-    res.writeHead(200, { 'Content-Type': CONTENT_TYPES[path.extname(full)] || 'application/octet-stream' });
+    // Files under assets/ are content-hashed by Vite, so they're immutable; the
+    // entry HTML must always revalidate so a rebuild's new bundle is picked up
+    // without a manual hard-refresh.
+    const cache = /^assets\//.test(rel) ? 'public, max-age=31536000, immutable' : 'no-store';
+    res.writeHead(200, {
+        'Content-Type': CONTENT_TYPES[path.extname(full)] || 'application/octet-stream',
+        'Cache-Control': cache,
+    });
     res.end(fs.readFileSync(full));
 }
 

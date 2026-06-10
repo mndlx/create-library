@@ -42,7 +42,7 @@ const engine_1 = require("../engine");
 const PORT = Number(process.env.PORT) || 4517;
 const WEB_DIR = path.join(__dirname, '..', 'web');
 const sendJson = (res, code, data) => {
-    res.writeHead(code, { 'Content-Type': 'application/json' });
+    res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
     res.end(JSON.stringify(data));
 };
 const readBody = (req) => new Promise((resolve, reject) => {
@@ -325,7 +325,14 @@ function serveStatic(res, pathname) {
         res.end('Not found');
         return;
     }
-    res.writeHead(200, { 'Content-Type': CONTENT_TYPES[path.extname(full)] || 'application/octet-stream' });
+    // Files under assets/ are content-hashed by Vite, so they're immutable; the
+    // entry HTML must always revalidate so a rebuild's new bundle is picked up
+    // without a manual hard-refresh.
+    const cache = /^assets\//.test(rel) ? 'public, max-age=31536000, immutable' : 'no-store';
+    res.writeHead(200, {
+        'Content-Type': CONTENT_TYPES[path.extname(full)] || 'application/octet-stream',
+        'Cache-Control': cache,
+    });
     res.end(fs.readFileSync(full));
 }
 const server = http.createServer((req, res) => {
