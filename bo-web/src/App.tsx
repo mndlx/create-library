@@ -34,7 +34,6 @@ import { useDialogs } from './components/dialogs';
 import { EditorView } from './components/EditorView';
 import { GenerateView } from './components/GenerateView';
 
-const DRAWER_W = 280;
 type View = 'editor' | 'generate' | 'author';
 type Severity = 'success' | 'error' | 'info';
 
@@ -43,6 +42,7 @@ export function App() {
     const [selected, setSelected] = useState<string | null>(null);
     const [workspace, setWorkspace] = useState<string | null>(null);
     const [view, setView] = useState<View>('editor');
+    const [drawerW, setDrawerW] = useState(280);
     const [snack, setSnack] = useState<{ msg: string; sev: Severity } | null>(null);
     const [result, setResult] = useState<unknown>(null);
     const [createOpen, setCreateOpen] = useState(false);
@@ -62,6 +62,16 @@ export function App() {
 
     const { prompt } = useDialogs();
     const notify = useCallback((msg: string, sev: Severity = 'info') => setSnack({ msg, sev }), []);
+
+    const startDrawerResize = (e: React.MouseEvent) => {
+        e.preventDefault();
+        const startX = e.clientX;
+        const startW = drawerW;
+        const onMove = (ev: MouseEvent) => setDrawerW(Math.min(520, Math.max(200, startW + ev.clientX - startX)));
+        const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+    };
 
     const openFolder = useCallback(async () => {
         const dir = await prompt({
@@ -129,8 +139,12 @@ export function App() {
                 </Toolbar>
             </AppBar>
 
-            <Drawer variant="permanent" sx={{ width: DRAWER_W, flexShrink: 0, '& .MuiDrawer-paper': { width: DRAWER_W, boxSizing: 'border-box' } }}>
+            <Drawer variant="permanent" sx={{ width: drawerW, flexShrink: 0, '& .MuiDrawer-paper': { width: drawerW, boxSizing: 'border-box', overflow: 'hidden' } }}>
                 <Toolbar variant="dense" />
+                <Box
+                    onMouseDown={startDrawerResize}
+                    sx={{ position: 'absolute', top: 0, right: 0, width: '5px', height: '100%', cursor: 'col-resize', zIndex: 2, '&:hover': { bgcolor: 'primary.main' } }}
+                />
                 <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
                     <Stack direction="row" alignItems="center" sx={{ px: 2, py: 1 }}>
                         <Typography variant="overline" color="text.secondary" sx={{ flex: 1 }}>Templates</Typography>

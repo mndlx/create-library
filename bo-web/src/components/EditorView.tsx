@@ -46,6 +46,8 @@ export function EditorView({ target, targetKey, notify }: Props) {
     const [tree, setTree] = useState<FileNode[]>([]);
     const [tabs, setTabs] = useState<OpenTab[]>([]);
     const [active, setActive] = useState<string | null>(null);
+    const [selected, setSelected] = useState<FileNode | null>(null);
+    const [explorerW, setExplorerW] = useState(260);
     const [ctx, setCtx] = useState<{ x: number; y: number; node: FileNode | null } | null>(null);
 
     // Re-resolve the loader whenever the target identity changes.
@@ -63,8 +65,26 @@ export function EditorView({ target, targetKey, notify }: Props) {
     useEffect(() => {
         setTabs([]);
         setActive(null);
+        setSelected(null);
         loadTree();
     }, [loadTree]);
+
+    // Drag the divider to resize the explorer pane.
+    const startResize = (e: React.MouseEvent) => {
+        e.preventDefault();
+        const startX = e.clientX;
+        const startW = explorerW;
+        const onMove = (ev: MouseEvent) => setExplorerW(Math.min(560, Math.max(160, startW + ev.clientX - startX)));
+        const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+    };
+
+    // Directory the next create should go into, based on the active selection.
+    const baseDirForCreate = (): string => {
+        if (!selected) return '';
+        return selected.type === 'dir' ? selected.path : selected.path.split('/').slice(0, -1).join('/');
+    };
 
     const openFile = useCallback(
         async (node: FileNode) => {
@@ -117,9 +137,12 @@ export function EditorView({ target, targetKey, notify }: Props) {
         }
     };
 
-    const newFile = async (asDir: boolean, baseNode: FileNode | null) => {
+    const newFile = async (asDir: boolean, baseNode?: FileNode | null) => {
         setCtx(null);
-        const baseDir = baseNode ? (baseNode.type === 'dir' ? baseNode.path : baseNode.path.split('/').slice(0, -1).join('/')) : '';
+        // Explicit node (from context menu) wins; otherwise use the active selection.
+        const baseDir = baseNode === undefined
+            ? baseDirForCreate()
+            : baseNode ? (baseNode.type === 'dir' ? baseNode.path : baseNode.path.split('/').slice(0, -1).join('/')) : '';
         const name = await prompt({
             title: asDir ? 'New folder' : 'New file',
             label: 'Path',
@@ -166,19 +189,45 @@ export function EditorView({ target, targetKey, notify }: Props) {
         }
     };
 
+    // Drag & drop move: relocate src into destDir (destDir '' = workspace root).
+    const move = async (src: string, destDir: string) => {
+        const base = src.split('/').pop()!;
+        const parent = src.split('/').slice(0, -1).join('/');
+        if (destDir === parent) return; // no-op: same folder
+        if (destDir === src || destDir.startsWith(src + '/')) {
+            notify('Cannot move a folder into itself', 'error');
+            return;
+        }
+        const to = destDir ? `${destDir}/${base}` : base;
+        try {
+            await api.renameFile(tgt, { from: src, to });
+            // Re-point any open tab whose path moved.
+            setTabs((ts) => ts.map((t) =>
+                t.path === src || t.path.startsWith(src + '/')
+                    ? { ...t, path: to + t.path.slice(src.length), name: t.name }
+                    : t
+            ));
+            setActive((a) => (a && (a === src || a.startsWith(src + '/')) ? to + a.slice(src.length) : a));
+            await loadTree();
+            notify('Moved', 'success');
+        } catch (e) {
+            notify((e as Error).message, 'error');
+        }
+    };
+
     return (
         <Box sx={{ display: 'flex', height: '100%', minHeight: 0 }}>
             {/* File explorer pane */}
-            <Box sx={{ width: 260, flexShrink: 0, borderRight: 1, borderColor: 'divider', display: 'flex', flexDirection: 'column' }}>
+            <Box sx={{ width: explorerW, flexShrink: 0, borderColor: 'divider', display: 'flex', flexDirection: 'column' }}>
                 <Stack direction="row" alignItems="center" sx={{ px: 1, py: 0.5 }}>
                     <Typography variant="caption" sx={{ flex: 1, textTransform: 'uppercase', letterSpacing: '.06em', color: 'text.secondary', pl: 1 }}>
                         Explorer
                     </Typography>
-                    <Tooltip title="New file">
-                        <IconButton size="small" onClick={() => newFile(false, null)}><NoteAddOutlinedIcon fontSize="small" /></IconButton>
+                    <Tooltip title="New file (in selection)">
+                        <IconButton size="small" onClick={() => newFile(false)}><NoteAddOutlinedIcon fontSize="small" /></IconButton>
                     </Tooltip>
-                    <Tooltip title="New folder">
-                        <IconButton size="small" onClick={() => newFile(true, null)}><CreateNewFolderOutlinedIcon fontSize="small" /></IconButton>
+                    <Tooltip title="New folder (in selection)">
+                        <IconButton size="small" onClick={() => newFile(true)}><CreateNewFolderOutlinedIcon fontSize="small" /></IconButton>
                     </Tooltip>
                     <Tooltip title="Refresh">
                         <IconButton size="small" onClick={loadTree}><RefreshIcon fontSize="small" /></IconButton>
@@ -188,15 +237,23 @@ export function EditorView({ target, targetKey, notify }: Props) {
                 <Box sx={{ overflow: 'auto', flex: 1, py: 0.5 }}>
                     <FileTree
                         nodes={tree}
-                        activePath={active}
-                        onOpenFile={openFile}
+                        selectedPath={selected?.path ?? null}
+                        onSelect={(node) => { setSelected(node); if (node.type === 'file') openFile(node); }}
+                        onMove={move}
                         onContext={(e, node) => {
                             e.preventDefault();
+                            if (node) setSelected(node);
                             setCtx({ x: e.clientX, y: e.clientY, node });
                         }}
                     />
                 </Box>
             </Box>
+
+            {/* Resize handle */}
+            <Box
+                onMouseDown={startResize}
+                sx={{ width: '5px', cursor: 'col-resize', flexShrink: 0, borderLeft: 1, borderColor: 'divider', '&:hover': { bgcolor: 'primary.main' } }}
+            />
 
             {/* Editor pane */}
             <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
