@@ -137,6 +137,13 @@ export function EditorView({ target, targetKey, notify }: Props) {
         }
     };
 
+    // Close a path and everything under it (used when deleting a folder).
+    const closeTabsUnder = (path: string) => {
+        const isUnder = (p: string) => p === path || p.startsWith(path + '/');
+        setTabs((ts) => ts.filter((t) => !isUnder(t.path)));
+        setActive((a) => (a && isUnder(a) ? null : a));
+    };
+
     const newFile = async (asDir: boolean, baseNode?: FileNode | null) => {
         setCtx(null);
         // Explicit node (from context menu) wins; otherwise use the active selection.
@@ -177,13 +184,22 @@ export function EditorView({ target, targetKey, notify }: Props) {
 
     const del = async (node: FileNode) => {
         setCtx(null);
-        const ok = await confirm({ title: 'Delete', message: `Delete ${node.path}? This cannot be undone.`, confirmText: 'Delete', danger: true });
+        const kind = node.type === 'dir' ? 'folder' : 'file';
+        const ok = await confirm({
+            title: `Delete ${kind}`,
+            message: node.type === 'dir'
+                ? `Delete the folder “${node.path}” and everything inside it? This removes the files from the template and cannot be undone.`
+                : `Delete “${node.path}”? This removes the file from the template and cannot be undone.`,
+            confirmText: 'Delete',
+            danger: true,
+        });
         if (!ok) return;
         try {
             await api.deleteFile(tgt, { path: node.path });
-            closeTab(node.path);
+            closeTabsUnder(node.path);
+            if (selected && (selected.path === node.path || selected.path.startsWith(node.path + '/'))) setSelected(null);
             await loadTree();
-            notify('Deleted', 'info');
+            notify(`Deleted ${node.path}`, 'info');
         } catch (e) {
             notify((e as Error).message, 'error');
         }
@@ -228,6 +244,13 @@ export function EditorView({ target, targetKey, notify }: Props) {
                     </Tooltip>
                     <Tooltip title="New folder (in selection)">
                         <IconButton size="small" onClick={() => newFile(true)}><CreateNewFolderOutlinedIcon fontSize="small" /></IconButton>
+                    </Tooltip>
+                    <Tooltip title={selected ? `Delete ${selected.name}` : 'Delete (select an item)'}>
+                        <span>
+                            <IconButton size="small" color="error" disabled={!selected} onClick={() => selected && del(selected)}>
+                                <DeleteOutlineIcon fontSize="small" />
+                            </IconButton>
+                        </span>
                     </Tooltip>
                     <Tooltip title="Refresh">
                         <IconButton size="small" onClick={loadTree}><RefreshIcon fontSize="small" /></IconButton>
