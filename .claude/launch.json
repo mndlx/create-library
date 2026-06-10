@@ -5,7 +5,7 @@
       "name": "bo-web",
       "runtimeExecutable": "node",
       "runtimeArgs": ["./bin/bo-web.js"],
-      "port": 4317,
+      "port": 4517,
       "autoPort": true,
       "env": { "NO_OPEN": "1" }
     }

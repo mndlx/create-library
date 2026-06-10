@@ -34,7 +34,7 @@ A **web** back-office is also available — same capabilities in the browser:
 npm run bo:web        # or: npx virtuallab-create-library-bo-web
 ```
 
-It starts a local server on http://localhost:4317 and opens it automatically.
+It starts a local server on http://localhost:4517 (or the next free port) and opens it automatically. Override with `PORT=5000 npm run bo:web`.
 
 From the menu you can:
 

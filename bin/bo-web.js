@@ -39,7 +39,7 @@ const fs = __importStar(require("fs"));
 const http = __importStar(require("http"));
 const path = __importStar(require("path"));
 const engine_1 = require("../engine");
-const PORT = Number(process.env.PORT) || 4317;
+const PORT = Number(process.env.PORT) || 4517;
 const WEB_DIR = path.join(__dirname, '..', 'web');
 const sendJson = (res, code, data) => {
     res.writeHead(code, { 'Content-Type': 'application/json' });
@@ -337,8 +337,8 @@ const server = http.createServer((req, res) => {
     }
     serveStatic(res, url.pathname);
 });
-server.listen(PORT, '127.0.0.1', () => {
-    const url = `http://localhost:${PORT}`;
+const announce = (port) => {
+    const url = `http://localhost:${port}`;
     console.log(`create-library back-office (web) → ${url}`);
     if (!process.env.NO_OPEN) {
         const opener = process.platform === 'win32' ? `start "" "${url}"` :
@@ -346,4 +346,30 @@ server.listen(PORT, '127.0.0.1', () => {
                 `xdg-open "${url}"`;
         (0, child_process_1.exec)(opener, () => { });
     }
+};
+/**
+ * Listen on PORT; if it's taken, try the next ports automatically. When PORT is
+ * set explicitly via the environment we don't shift it (the user asked for it).
+ */
+const start = (port, attemptsLeft) => {
+    server.once('error', (err) => {
+        if (err.code === 'EADDRINUSE' && attemptsLeft > 0 && !process.env.PORT) {
+            console.warn(`Port ${port} in use, trying ${port + 1}…`);
+            start(port + 1, attemptsLeft - 1);
+        }
+        else if (err.code === 'EADDRINUSE') {
+            console.error(`Port ${port} is in use. Set PORT to a free port and retry.`);
+            process.exit(1);
+        }
+        else {
+            throw err;
+        }
+    });
+    server.listen(port, '127.0.0.1');
+};
+// One persistent handler so a failed attempt's callback can't fire on a later bind.
+server.on('listening', () => {
+    const addr = server.address();
+    announce(typeof addr === 'object' && addr ? addr.port : PORT);
 });
+start(PORT, 20);
