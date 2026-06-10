@@ -1,4 +1,6 @@
+import AddIcon from '@mui/icons-material/Add';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import SyncIcon from '@mui/icons-material/Sync';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
@@ -90,12 +92,29 @@ function VariableRow({ template, v, notify, reload }: { template: Template; v: V
 export function VariablesPanel({ template, notify, reload }: Props) {
     const [start, setStart] = useState(template.tokenConfig.start);
     const [end, setEnd] = useState(template.tokenConfig.end);
+    const [newToken, setNewToken] = useState('');
 
     useEffect(() => { setStart(template.tokenConfig.start); setEnd(template.tokenConfig.end); }, [template.tokenConfig]);
 
     const saveConfig = async () => {
         try { await api.setTokenConfig({ templateName: template.name, start, end }); notify('Token delimiters saved', 'success'); reload(); }
         catch (e) { notify((e as Error).message, 'error'); }
+    };
+
+    const addVariable = async () => {
+        const token = newToken.trim();
+        if (!token) return notify('Token name required', 'error');
+        if (!/^[A-Za-z0-9_]+$/.test(token)) return notify('Use only letters, numbers, underscore', 'error');
+        if (template.variables.some((v) => v.token === token)) return notify('Token already exists', 'error');
+        try {
+            await api.setVariable({
+                templateName: template.name,
+                variable: { name: token, token, message: token, type: 'text', default: '', validate: 'none', exposeCli: true },
+            });
+            notify(`Added ${start}${token}${end}`, 'success');
+            setNewToken('');
+            reload();
+        } catch (e) { notify((e as Error).message, 'error'); }
     };
 
     return (
@@ -118,19 +137,34 @@ export function VariablesPanel({ template, notify, reload }: Props) {
 
             <Card variant="outlined" sx={{ mb: 2 }}>
                 <CardContent>
-                    <Typography variant="overline" color="text.secondary">Variables (inspector)</Typography>
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                        <Typography variant="overline" color="text.secondary" sx={{ flex: 1 }}>Variables (inspector)</Typography>
+                        <Button size="small" startIcon={<SyncIcon />} onClick={reload}>Sync from files</Button>
+                    </Stack>
                     <Typography variant="body2" color="text.secondary">
-                        Auto-detected from the template files. Set the question, default and whether the CLI asks for each.
+                        Auto-detected from the template files. “Sync from files” re-scans after manual edits. Set the question, default and whether the CLI asks for each.
                     </Typography>
                     <Divider sx={{ mt: 1 }} />
                     {template.variables.length === 0 && (
                         <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
-                            No tokens yet. Use <code>{start}name{end}</code> in a file or filename in the Editor.
+                            No tokens yet. Use <code>{start}name{end}</code> in a file or filename in the Editor, or add one below.
                         </Typography>
                     )}
                     {template.variables.map((v) => (
                         <VariableRow key={v.token} template={template} v={v} notify={notify} reload={reload} />
                     ))}
+
+                    <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 2 }}>
+                        <TextField
+                            size="small" label="New token name" placeholder="apiUrl" value={newToken}
+                            onChange={(e) => setNewToken(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') addVariable(); }}
+                            InputProps={{ startAdornment: <Box component="span" sx={{ color: 'text.secondary', mr: 0.5, fontFamily: 'ui-monospace, monospace' }}>{start}</Box>,
+                                endAdornment: <Box component="span" sx={{ color: 'text.secondary', ml: 0.5, fontFamily: 'ui-monospace, monospace' }}>{end}</Box> }}
+                            sx={{ width: 280 }}
+                        />
+                        <Button variant="contained" startIcon={<AddIcon />} onClick={addVariable}>Add variable</Button>
+                    </Stack>
                 </CardContent>
             </Card>
         </>

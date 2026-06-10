@@ -9,25 +9,29 @@ export const listTemplates = (): LoadedTemplate[] => {
     const out: LoadedTemplate[] = [];
     const seen = new Set<string>();
 
+    const tryLoad = (dir: string) => {
+        if (!fs.existsSync(path.join(dir, MANIFEST_FILENAME))) return;
+        try {
+            const template = loadManifest(dir);
+            if (seen.has(template.manifest.name)) return;
+            seen.add(template.manifest.name);
+            out.push(template);
+        } catch (e) {
+            console.error(`Skipping invalid template at ${dir}: ${(e as Error).message}`);
+        }
+    };
+
     for (const root of resolveTemplateDirs()) {
+        // A registered dir can itself be a template (folder linked directly)…
+        tryLoad(root);
+        // …or a parent holding one template per child directory.
         let entries: string[];
         try {
             entries = fs.readdirSync(root);
         } catch {
             continue;
         }
-        for (const entry of entries) {
-            const dir = path.join(root, entry);
-            if (!fs.existsSync(path.join(dir, MANIFEST_FILENAME))) continue;
-            try {
-                const template = loadManifest(dir);
-                if (seen.has(template.manifest.name)) continue;
-                seen.add(template.manifest.name);
-                out.push(template);
-            } catch (e) {
-                console.error(`Skipping invalid template at ${dir}: ${(e as Error).message}`);
-            }
-        }
+        for (const entry of entries) tryLoad(path.join(root, entry));
     }
 
     return out;

@@ -73,6 +73,19 @@ export function App() {
         window.addEventListener('mouseup', onUp);
     };
 
+    const WS_KEY = 'bo-workspace';
+
+    const openWorkspace = useCallback((dir: string) => {
+        setWorkspace(dir);
+        setView('editor');
+        try { localStorage.setItem(WS_KEY, dir); } catch { /* storage blocked */ }
+    }, []);
+
+    const closeWorkspace = useCallback(() => {
+        setWorkspace(null);
+        try { localStorage.removeItem(WS_KEY); } catch { /* storage blocked */ }
+    }, []);
+
     const openFolder = useCallback(async () => {
         const dir = await prompt({
             title: 'Open folder',
@@ -85,12 +98,27 @@ export function App() {
         if (!dir) return;
         try {
             await api.files({ root: dir }); // validate it exists/readable
-            setWorkspace(dir);
-            setView('editor');
+            openWorkspace(dir);
         } catch (e) {
             notify((e as Error).message, 'error');
         }
-    }, [prompt, state.cwd, notify]);
+    }, [prompt, state.cwd, notify, openWorkspace]);
+
+    // Restore the last opened workspace across reloads/restarts.
+    useEffect(() => {
+        let saved: string | null = null;
+        try { saved = localStorage.getItem(WS_KEY); } catch { saved = null; }
+        if (!saved) return;
+        api.files({ root: saved })
+            .then(() => openWorkspace(saved!))
+            .catch(() => { try { localStorage.removeItem(WS_KEY); } catch { /* ignore */ } });
+    }, [openWorkspace]);
+
+    const registerWorkspace = useCallback(async () => {
+        if (!workspace) return;
+        try { await api.addDir({ dir: workspace }); notify('Registered as templates directory', 'success'); reload(); }
+        catch (e) { notify((e as Error).message, 'error'); }
+    }, [workspace, notify]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const reload = useCallback(async () => {
         try {
@@ -106,7 +134,7 @@ export function App() {
 
     const template: Template | null = state.templates.find((t) => t.name === selected) ?? null;
 
-    const selectTemplate = (name: string) => { setWorkspace(null); setSelected(name); };
+    const selectTemplate = (name: string) => { closeWorkspace(); setSelected(name); };
     const onCreated = (name: string) => { reload().then(() => { selectTemplate(name); setView('editor'); }); };
 
     const editorTarget: FileTarget | null = workspace ? { root: workspace } : template ? { template: template.name } : null;
@@ -182,8 +210,11 @@ export function App() {
                                     <Typography variant="caption" color="text.secondary" display="block">Workspace</Typography>
                                     <Typography variant="body2" noWrap title={workspace} sx={{ fontFamily: 'ui-monospace, monospace', fontSize: 11 }}>{workspace}</Typography>
                                 </Box>
-                                <Tooltip title="Close workspace"><IconButton size="small" onClick={() => setWorkspace(null)}><CloseIcon fontSize="small" /></IconButton></Tooltip>
+                                <Tooltip title="Close workspace"><IconButton size="small" onClick={closeWorkspace}><CloseIcon fontSize="small" /></IconButton></Tooltip>
                             </Stack>
+                            <Box sx={{ px: 2, pb: 1 }}>
+                                <Button size="small" variant="outlined" fullWidth onClick={registerWorkspace}>Register as templates dir</Button>
+                            </Box>
                             <Divider />
                         </>
                     )}

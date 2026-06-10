@@ -42,7 +42,24 @@ const manifest_1 = require("./manifest");
 const listTemplates = () => {
     const out = [];
     const seen = new Set();
+    const tryLoad = (dir) => {
+        if (!fs.existsSync(path.join(dir, manifest_1.MANIFEST_FILENAME)))
+            return;
+        try {
+            const template = (0, manifest_1.loadManifest)(dir);
+            if (seen.has(template.manifest.name))
+                return;
+            seen.add(template.manifest.name);
+            out.push(template);
+        }
+        catch (e) {
+            console.error(`Skipping invalid template at ${dir}: ${e.message}`);
+        }
+    };
     for (const root of (0, config_1.resolveTemplateDirs)()) {
+        // A registered dir can itself be a template (folder linked directly)…
+        tryLoad(root);
+        // …or a parent holding one template per child directory.
         let entries;
         try {
             entries = fs.readdirSync(root);
@@ -50,21 +67,8 @@ const listTemplates = () => {
         catch {
             continue;
         }
-        for (const entry of entries) {
-            const dir = path.join(root, entry);
-            if (!fs.existsSync(path.join(dir, manifest_1.MANIFEST_FILENAME)))
-                continue;
-            try {
-                const template = (0, manifest_1.loadManifest)(dir);
-                if (seen.has(template.manifest.name))
-                    continue;
-                seen.add(template.manifest.name);
-                out.push(template);
-            }
-            catch (e) {
-                console.error(`Skipping invalid template at ${dir}: ${e.message}`);
-            }
-        }
+        for (const entry of entries)
+            tryLoad(path.join(root, entry));
     }
     return out;
 };
