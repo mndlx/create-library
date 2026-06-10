@@ -31,7 +31,7 @@ export function GenerateView({ template, state, notify, onResult }: Props) {
     const [includeManifest, setIncludeManifest] = useState(false);
 
     useEffect(() => {
-        setAnswers(Object.fromEntries(template.prompts.map((p) => [p.name, p.default ?? ''])));
+        setAnswers(Object.fromEntries(template.variables.map((v) => [v.name, v.default ?? ''])));
         setFeatures(Object.fromEntries(template.features.map((f) => [f.id, f.default ?? (f.type === 'boolean' ? false : '')])));
         setMode(template.output);
         setInto('');
@@ -70,26 +70,26 @@ export function GenerateView({ template, state, notify, onResult }: Props) {
             </Stack>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>{template.description}</Typography>
 
-            {template.prompts.length > 0 && (
+            {template.variables.length > 0 && (
                 <Card variant="outlined" sx={{ mb: 2 }}>
                     <CardContent>
                         <Typography variant="overline" color="text.secondary">Variables</Typography>
                         <Grid container spacing={2} sx={{ mt: 0 }}>
-                            {template.prompts.map((p) => (
-                                <Grid size={{ xs: 12, sm: 6 }} key={p.name}>
-                                    {p.type === 'select' ? (
+                            {template.variables.map((v) => (
+                                <Grid size={{ xs: 12, sm: 6 }} key={v.name}>
+                                    {v.type === 'select' ? (
                                         <TextField
-                                            select fullWidth size="small" label={p.message}
-                                            value={answers[p.name] ?? ''}
-                                            onChange={(e) => setAnswers((a) => ({ ...a, [p.name]: e.target.value }))}
+                                            select fullWidth size="small" label={v.message}
+                                            value={answers[v.name] ?? ''}
+                                            onChange={(e) => setAnswers((a) => ({ ...a, [v.name]: e.target.value }))}
                                         >
-                                            {(p.options ?? []).map((o) => <MenuItem key={o} value={o}>{o}</MenuItem>)}
+                                            {(v.options ?? []).map((o) => <MenuItem key={o} value={o}>{o}</MenuItem>)}
                                         </TextField>
                                     ) : (
                                         <TextField
-                                            fullWidth size="small" label={p.message}
-                                            value={answers[p.name] ?? ''}
-                                            onChange={(e) => setAnswers((a) => ({ ...a, [p.name]: e.target.value }))}
+                                            fullWidth size="small" label={`${v.message} (${template.tokenConfig.start}${v.token}${template.tokenConfig.end})`}
+                                            value={answers[v.name] ?? ''}
+                                            onChange={(e) => setAnswers((a) => ({ ...a, [v.name]: e.target.value }))}
                                         />
                                     )}
                                 </Grid>

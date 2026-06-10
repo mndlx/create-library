@@ -37,17 +37,18 @@ exports.detokenizePaths = exports.detokenizeTree = exports.tokenReplace = void 0
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const fsx_1 = require("./fsx");
-/** Replace every `__TOKEN__` occurrence (literal, no regex) with its value. */
-const tokenReplace = (input, tokens) => {
+const tokens_1 = require("./tokens");
+/** Replace every `<start>TOKEN<end>` occurrence (literal, no regex) with its value. */
+const tokenReplace = (input, tokens, cfg = tokens_1.DEFAULT_TOKEN_CONFIG) => {
     let out = input;
     for (const [token, value] of Object.entries(tokens)) {
-        out = out.split(`__${token}__`).join(value);
+        out = out.split(`${cfg.start}${token}${cfg.end}`).join(value);
     }
     return out;
 };
 exports.tokenReplace = tokenReplace;
 /** Replace tokens across every text file under `root`. */
-const detokenizeTree = (root, tokens, extraExcludePaths = []) => {
+const detokenizeTree = (root, tokens, extraExcludePaths = [], cfg = tokens_1.DEFAULT_TOKEN_CONFIG) => {
     for (const file of (0, fsx_1.walkFiles)(root)) {
         if ((0, fsx_1.isProbablyBinary)(file))
             continue;
@@ -55,19 +56,18 @@ const detokenizeTree = (root, tokens, extraExcludePaths = []) => {
         if (extraExcludePaths.some((ex) => rel.includes(ex)))
             continue;
         const content = fs.readFileSync(file, 'utf8');
-        const replaced = (0, exports.tokenReplace)(content, tokens);
+        const replaced = (0, exports.tokenReplace)(content, tokens, cfg);
         if (replaced !== content)
             fs.writeFileSync(file, replaced);
     }
 };
 exports.detokenizeTree = detokenizeTree;
-const fsx_2 = require("./fsx");
-/** Rename files and directories whose names contain `__TOKEN__`, deepest first. */
-const detokenizePaths = (root, tokens) => {
+/** Rename files and directories whose names contain a token, deepest first. */
+const detokenizePaths = (root, tokens, cfg = tokens_1.DEFAULT_TOKEN_CONFIG) => {
     const entries = [];
     const walk = (dir) => {
         for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-            if (entry.isDirectory() && fsx_2.DEFAULT_EXCLUDE_DIRS.includes(entry.name))
+            if (entry.isDirectory() && fsx_1.DEFAULT_EXCLUDE_DIRS.includes(entry.name))
                 continue;
             const full = path.join(dir, entry.name);
             entries.push(full);
@@ -81,7 +81,7 @@ const detokenizePaths = (root, tokens) => {
         .forEach((full) => {
         const dir = path.dirname(full);
         const base = path.basename(full);
-        const renamed = (0, exports.tokenReplace)(base, tokens);
+        const renamed = (0, exports.tokenReplace)(base, tokens, cfg);
         if (renamed !== base)
             fs.renameSync(full, path.join(dir, renamed));
     });

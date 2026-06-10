@@ -16,8 +16,10 @@ import {
     readRawManifest,
     renderNextSteps,
     resolveTemplateDirs,
+    resolveVariables,
     savePreset,
     scaffoldTemplate,
+    tokenConfigOf,
     validateManifest,
     writeRawManifest,
 } from '../engine';
@@ -56,6 +58,8 @@ const serialize = (t: LoadedTemplate) => ({
     dir: t.dir,
     prompts: t.manifest.prompts,
     features: t.manifest.features ?? [],
+    tokenConfig: tokenConfigOf(t),
+    variables: resolveVariables(t),
 });
 
 const requireTemplate = (name: string): LoadedTemplate => {
@@ -231,6 +235,55 @@ async function handleApi(
         m.prompts.push(body.prompt as PromptDef);
         const errors = validateManifest(m);
         if (errors.length) throw new Error(errors.join('; '));
+        writeRawManifest(t.dir, m);
+        return sendJson(res, 200, { ok: true });
+    }
+
+    if (req.method === 'POST' && pathname === '/api/set-token-config') {
+        const t = requireTemplate(body.templateName);
+        const start = String(body.start ?? '').trim();
+        const end = String(body.end ?? '').trim();
+        if (!start || !end) throw new Error('start and end delimiters are required');
+        const m = readRawManifest(t.dir);
+        m.tokenConfig = { start, end };
+        const errors = validateManifest(m);
+        if (errors.length) throw new Error(errors.join('; '));
+        writeRawManifest(t.dir, m);
+        return sendJson(res, 200, { ok: true });
+    }
+
+    // Upsert a token's metadata (message, default, type, options, validate, exposeCli).
+    if (req.method === 'POST' && pathname === '/api/set-variable') {
+        const t = requireTemplate(body.templateName);
+        const v = body.variable as PromptDef & { exposeCli?: boolean };
+        if (!v || !v.name) throw new Error('variable.name is required');
+        const m = readRawManifest(t.dir);
+        m.prompts = m.prompts || [];
+        const token = v.token || v.name;
+        const idx = m.prompts.findIndex((p) => (p.token || p.name) === token);
+        const next: PromptDef = {
+            name: v.name,
+            message: v.message || v.name,
+            type: v.type === 'select' ? 'select' : 'text',
+            token,
+            default: v.default,
+            validate: v.validate,
+            options: v.type === 'select' ? v.options : undefined,
+            exposeCli: v.exposeCli !== false,
+        };
+        if (idx >= 0) m.prompts[idx] = next;
+        else m.prompts.push(next);
+        const errors = validateManifest(m);
+        if (errors.length) throw new Error(errors.join('; '));
+        writeRawManifest(t.dir, m);
+        return sendJson(res, 200, { ok: true });
+    }
+
+    if (req.method === 'POST' && pathname === '/api/remove-variable') {
+        const t = requireTemplate(body.templateName);
+        const m = readRawManifest(t.dir);
+        const token = String(body.token || '');
+        m.prompts = (m.prompts || []).filter((p) => (p.token || p.name) !== token);
         writeRawManifest(t.dir, m);
         return sendJson(res, 200, { ok: true });
     }

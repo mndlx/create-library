@@ -49,6 +49,12 @@ export const validateManifest = (data: unknown): string[] => {
     if (m.output !== undefined && m.output !== 'new' && m.output !== 'merge') {
         errors.push('"output" must be "new" or "merge"');
     }
+    if (m.tokenConfig !== undefined) {
+        const tc = m.tokenConfig as Record<string, unknown>;
+        if (!tc || typeof tc !== 'object' || typeof tc.start !== 'string' || !tc.start || typeof tc.end !== 'string' || !tc.end) {
+            errors.push('"tokenConfig" must have non-empty string "start" and "end"');
+        }
+    }
     if (m.features !== undefined) {
         if (!Array.isArray(m.features)) {
             errors.push('"features" must be an array');

@@ -10,7 +10,8 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useState } from 'react';
-import { api, type AppState, type OutputMode, type PromptDef, type Template } from '../api';
+import { api, type AppState, type OutputMode, type Template } from '../api';
+import { VariablesPanel } from './VariablesPanel';
 
 interface Props {
     template: Template | null;
@@ -23,8 +24,6 @@ interface Props {
 export function AuthorView({ template, state, notify, reload, onCreated }: Props) {
     // create template
     const [ct, setCt] = useState({ name: '', title: '', description: '', output: 'new' as OutputMode, rootDir: '' });
-    // add variable
-    const [av, setAv] = useState({ name: '', message: '', type: 'text' as PromptDef['type'], token: '', default: '', validate: 'none', options: '' });
     // add component
     const [ac, setAc] = useState({ name: '', default: false });
     const [dir, setDir] = useState('');
@@ -46,15 +45,6 @@ export function AuthorView({ template, state, notify, reload, onCreated }: Props
             notify((e as Error).message, 'error');
         }
     };
-
-    const addVariable = wrap(() => {
-        if (!template) throw new Error('Select a template first');
-        const prompt: PromptDef = { name: av.name, message: av.message, type: av.type, token: av.token || undefined };
-        if (av.default) prompt.default = av.default;
-        if (av.type === 'select') prompt.options = av.options.split(',').map((s) => s.trim()).filter(Boolean);
-        else prompt.validate = av.validate;
-        return api.addVariable({ templateName: template.name, prompt });
-    }, 'Variable added');
 
     const addComponent = wrap(() => {
         if (!template) throw new Error('Select a template first');
@@ -92,6 +82,8 @@ export function AuthorView({ template, state, notify, reload, onCreated }: Props
                 </CardContent>
             </Card>
 
+            {template && <VariablesPanel template={template} notify={notify} reload={reload} />}
+
             <Card variant="outlined">
                 <CardContent>
                     <Typography variant="overline" color="text.secondary">
@@ -99,39 +91,17 @@ export function AuthorView({ template, state, notify, reload, onCreated }: Props
                     </Typography>
                     <Grid container spacing={3} sx={{ mt: 0 }}>
                         <Grid size={{ xs: 12, md: 6 }}>
-                            <Typography variant="subtitle2" sx={{ mb: 1 }}>Add a variable</Typography>
-                            <Stack spacing={1.5}>
-                                <TextField size="small" label="Name" placeholder="apiUrl" value={av.name} onChange={(e) => setAv({ ...av, name: e.target.value })} />
-                                <TextField size="small" label="Question" placeholder="API base URL" value={av.message} onChange={(e) => setAv({ ...av, message: e.target.value })} />
-                                <Stack direction="row" spacing={1}>
-                                    <TextField select size="small" label="Type" sx={{ width: 140 }} value={av.type} onChange={(e) => setAv({ ...av, type: e.target.value as PromptDef['type'] })}>
-                                        <MenuItem value="text">text</MenuItem>
-                                        <MenuItem value="select">select</MenuItem>
-                                    </TextField>
-                                    <TextField size="small" label="Token (__TOKEN__)" fullWidth value={av.token} onChange={(e) => setAv({ ...av, token: e.target.value })} />
-                                </Stack>
-                                <TextField size="small" label="Default" value={av.default} onChange={(e) => setAv({ ...av, default: e.target.value })} />
-                                {av.type === 'text' ? (
-                                    <TextField select size="small" label="Validator" value={av.validate} onChange={(e) => setAv({ ...av, validate: e.target.value })}>
-                                        <MenuItem value="none">none</MenuItem>
-                                        <MenuItem value="packageName">packageName</MenuItem>
-                                        <MenuItem value="nonEmpty">nonEmpty</MenuItem>
-                                    </TextField>
-                                ) : (
-                                    <TextField size="small" label="Options (comma-separated)" placeholder="dev, prod" value={av.options} onChange={(e) => setAv({ ...av, options: e.target.value })} />
-                                )}
-                                <Button variant="contained" onClick={addVariable}>Add variable</Button>
-                            </Stack>
-                        </Grid>
-
-                        <Grid size={{ xs: 12, md: 6 }}>
                             <Typography variant="subtitle2" sx={{ mb: 1 }}>Add a component</Typography>
                             <Stack spacing={1.5}>
                                 <TextField size="small" label="Name (PascalCase)" placeholder="Modal" value={ac.name} onChange={(e) => setAc({ ...ac, name: e.target.value })} />
                                 <FormControlLabel control={<Checkbox checked={ac.default} onChange={(e) => setAc({ ...ac, default: e.target.checked })} />} label="Included by default" />
                                 <Button variant="contained" onClick={addComponent}>Add component</Button>
-
-                                <Typography variant="subtitle2" sx={{ mt: 2 }}>Register external templates directory</Typography>
+                            </Stack>
+                        </Grid>
+                        <Grid size={{ xs: 12, md: 6 }}>
+                            <Typography variant="subtitle2" sx={{ mb: 1 }}>Maintenance</Typography>
+                            <Stack spacing={1.5}>
+                                <Typography variant="caption" color="text.secondary">Register external templates directory</Typography>
                                 <Stack direction="row" spacing={1}>
                                     <TextField size="small" fullWidth placeholder="C:\\path\\to\\templates" value={dir} onChange={(e) => setDir(e.target.value)} />
                                     <Button variant="outlined" onClick={addDir}>Add</Button>

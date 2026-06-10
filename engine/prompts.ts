@@ -1,33 +1,36 @@
 import { Terminal } from '@virtual-registry/mandolin';
-import { LoadedTemplate, PromptDef } from './types';
+import { ResolvedVariable, resolveVariables } from './tokens';
+import { LoadedTemplate } from './types';
 import { normalizePackageName } from './validators';
 
 type State = Record<string, string>;
 
-const applyValidator = (prompt: PromptDef, value: string): string => {
-    const fallback = prompt.default ?? '';
-    if (prompt.validate === 'packageName') return normalizePackageName(value) || normalizePackageName(fallback);
-    if (prompt.validate === 'nonEmpty') return value || fallback;
+const applyValidator = (v: ResolvedVariable, value: string): string => {
+    const fallback = v.default ?? '';
+    if (v.validate === 'packageName') return normalizePackageName(value) || normalizePackageName(fallback);
+    if (v.validate === 'nonEmpty') return value || fallback;
     return value || fallback;
 };
 
-/** Drive the manifest's prompts through a mandolin wizard and return the answers. */
+/** Drive the template's variables through a mandolin wizard and return the answers. */
 export const runTemplatePrompts = async (template: LoadedTemplate): Promise<State> => {
     const wizard = new Terminal<State>();
+    const variables = resolveVariables(template);
 
     const initial: State = {};
-    for (const prompt of template.manifest.prompts) initial[prompt.name] = prompt.default ?? '';
+    for (const v of variables) initial[v.name] = v.default;
     wizard.initState(initial);
 
-    for (const prompt of template.manifest.prompts) {
-        const label = prompt.default ? `${prompt.message} (default: ${prompt.default})` : prompt.message;
+    // Only tokens exposed to the CLI are asked; the rest use their defaults.
+    for (const v of variables.filter((x) => x.exposeCli)) {
+        const label = v.default ? `${v.message} (default: ${v.default})` : v.message;
         wizard.newLine(label);
 
-        if (prompt.type === 'select' && prompt.options && prompt.options.length) {
-            const options = prompt.options;
-            wizard.newSelectLine(options, (sel, state) => ({ ...state, [prompt.name]: String(sel) }));
+        if (v.type === 'select' && v.options && v.options.length) {
+            const options = v.options;
+            wizard.newSelectLine(options, (sel, state) => ({ ...state, [v.name]: String(sel) }));
         } else {
-            wizard.newInputLine((input, state) => ({ ...state, [prompt.name]: applyValidator(prompt, input) }));
+            wizard.newInputLine((input, state) => ({ ...state, [v.name]: applyValidator(v, input) }));
         }
     }
 

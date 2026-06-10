@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.withDefaults = exports.resolveEffects = exports.defaultSelection = exports.featureDefault = void 0;
+const tokens_1 = require("./tokens");
 const ownEffects = (f) => ({
     overlay: f.overlay,
     packageJson: f.packageJson,
@@ -43,9 +44,9 @@ exports.resolveEffects = resolveEffects;
 const withDefaults = (template, config) => {
     const features = { ...(0, exports.defaultSelection)(template), ...(config.features ?? {}) };
     const answers = { ...(config.answers ?? {}) };
-    for (const p of template.manifest.prompts)
-        if (answers[p.name] === undefined)
-            answers[p.name] = p.default ?? '';
+    for (const v of (0, tokens_1.resolveVariables)(template))
+        if (answers[v.name] === undefined)
+            answers[v.name] = v.default;
     return { answers, features };
 };
 exports.withDefaults = withDefaults;

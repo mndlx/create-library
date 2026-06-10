@@ -1,3 +1,4 @@
+import { resolveVariables } from './tokens';
 import { FeatureDef, FeatureEffects, GenerationConfig, LoadedTemplate } from './types';
 
 const ownEffects = (f: FeatureDef): FeatureEffects => ({
@@ -41,6 +42,6 @@ export const resolveEffects = (
 export const withDefaults = (template: LoadedTemplate, config: GenerationConfig): Required<Pick<GenerationConfig, 'answers' | 'features'>> => {
     const features = { ...defaultSelection(template), ...(config.features ?? {}) };
     const answers = { ...(config.answers ?? {}) };
-    for (const p of template.manifest.prompts) if (answers[p.name] === undefined) answers[p.name] = p.default ?? '';
+    for (const v of resolveVariables(template)) if (answers[v.name] === undefined) answers[v.name] = v.default;
     return { answers, features };
 };

@@ -15,6 +15,14 @@ export interface PromptDef {
     validate?: 'packageName' | 'nonEmpty' | 'none';
     /** Options for `type: "select"`. */
     options?: string[];
+    /** Whether the CLI prompts for this token. Default true; if false the default is used. */
+    exposeCli?: boolean;
+}
+
+/** Delimiters that wrap a dynamic token in template files, e.g. `@@`name`@@`. */
+export interface TokenConfig {
+    start: string;
+    end: string;
 }
 
 export interface InjectDef {
@@ -79,6 +87,8 @@ export interface TemplateManifest {
     nameVar?: string;
     /** "new" creates a folder; "merge" integrates into an existing project. Default "new". */
     output?: 'new' | 'merge';
+    /** Delimiters for dynamic tokens. Defaults to `__`/`__` (legacy) when unset. */
+    tokenConfig?: TokenConfig;
     prompts: PromptDef[];
     /** Configurable, conditional parts of the output. */
     features?: FeatureDef[];

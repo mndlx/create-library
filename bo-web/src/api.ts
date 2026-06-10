@@ -20,6 +20,23 @@ export interface FeatureDef {
     options?: string[];
 }
 
+export interface TokenConfig {
+    start: string;
+    end: string;
+}
+
+export interface Variable {
+    name: string;
+    token: string;
+    message: string;
+    type: 'text' | 'select';
+    default: string;
+    validate: 'packageName' | 'nonEmpty' | 'none';
+    options?: string[];
+    exposeCli: boolean;
+    detected: boolean;
+}
+
 export interface Template {
     name: string;
     title: string;
@@ -29,6 +46,8 @@ export interface Template {
     dir: string;
     prompts: PromptDef[];
     features: FeatureDef[];
+    tokenConfig: TokenConfig;
+    variables: Variable[];
 }
 
 export interface AppState {
@@ -83,6 +102,9 @@ export const api = {
         req<{ dir: string; name: string }>('/api/create-template', p),
 
     addVariable: (p: { templateName: string; prompt: PromptDef }) => req<{ ok: true }>('/api/add-variable', p),
+    setVariable: (p: { templateName: string; variable: Omit<Variable, 'detected'> }) => req<{ ok: true }>('/api/set-variable', p),
+    removeVariable: (p: { templateName: string; token: string }) => req<{ ok: true }>('/api/remove-variable', p),
+    setTokenConfig: (p: { templateName: string; start: string; end: string }) => req<{ ok: true }>('/api/set-token-config', p),
     addComponent: (p: { templateName: string; component: string; default: boolean }) =>
         req<{ ok: true }>('/api/add-component', p),
     setOutput: (p: { templateName: string; output: OutputMode }) => req<{ ok: true }>('/api/set-output', p),

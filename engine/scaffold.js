@@ -51,6 +51,7 @@ const scaffoldTemplate = ({ rootDir, name, title, description, output = 'new', s
         version: '1.0.0',
         source,
         output,
+        tokenConfig: { start: '@@', end: '@@' },
         nameVar: 'name',
         prompts: [
             {
@@ -60,16 +61,17 @@ const scaffoldTemplate = ({ rootDir, name, title, description, output = 'new', s
                 default: 'my-app',
                 token: 'REPLACE',
                 validate: 'packageName',
+                exposeCli: true,
             },
         ],
         detokenize: { exclude: [] },
         packageJson: {},
         hooks: { postGenerate: [] },
-        nextSteps: ['cd __REPLACE__', 'npm install'],
+        nextSteps: ['cd @@REPLACE@@', 'npm install'],
     };
     fs.writeFileSync(path.join(templateDir, manifest_1.MANIFEST_FILENAME), JSON.stringify(manifest, null, 2) + '\n');
-    fs.writeFileSync(path.join(payloadDir, 'package.json'), JSON.stringify({ name: '__REPLACE__', version: '0.0.0', private: true }, null, 2) + '\n');
-    fs.writeFileSync(path.join(payloadDir, 'README.md'), `# __REPLACE__\n\n${description || 'A new project scaffolded by virtuallab-create-library.'}\n`);
+    fs.writeFileSync(path.join(payloadDir, 'package.json'), JSON.stringify({ name: '@@REPLACE@@', version: '0.0.0', private: true }, null, 2) + '\n');
+    fs.writeFileSync(path.join(payloadDir, 'README.md'), `# @@REPLACE@@\n\n${description || 'A new project scaffolded by virtuallab-create-library.'}\n`);
     return templateDir;
 };
 exports.scaffoldTemplate = scaffoldTemplate;

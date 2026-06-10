@@ -9,6 +9,7 @@ import { applyInjects, overlayDir } from './overlay';
 import { mergePackageJson } from './packageJson';
 import { MANIFEST_FILENAME } from './manifest';
 import { detokenizePaths, detokenizeTree, tokenReplace } from './render';
+import { resolveVariables, tokenConfigOf } from './tokens';
 import { InjectDef, LoadedTemplate } from './types';
 
 /**
@@ -22,9 +23,9 @@ export const tokensFromAnswers = (
     answers: Record<string, string>
 ): Record<string, string> => {
     const tokens: Record<string, string> = {};
-    for (const prompt of template.manifest.prompts) {
-        const token = prompt.token || prompt.name;
-        tokens[token] = answers[prompt.name] ?? prompt.default ?? '';
+    // Every detected/declared variable contributes a token value.
+    for (const v of resolveVariables(template)) {
+        tokens[v.token] = answers[v.name] ?? answers[v.token] ?? v.default;
     }
     return tokens;
 };
@@ -69,8 +70,9 @@ export const assemble = (
 
     const tokens = tokensFromAnswers(template, answers);
     for (const effect of effects) Object.assign(tokens, effect.tokens ?? {});
-    detokenizeTree(stagingDir, tokens, template.manifest.detokenize?.exclude ?? []);
-    detokenizePaths(stagingDir, tokens);
+    const cfg = tokenConfigOf(template);
+    detokenizeTree(stagingDir, tokens, template.manifest.detokenize?.exclude ?? [], cfg);
+    detokenizePaths(stagingDir, tokens, cfg);
 
     return tokens;
 };
@@ -146,4 +148,4 @@ export const mergeInto = ({
 export const renderNextSteps = (
     template: LoadedTemplate,
     tokens: Record<string, string>
-): string[] => (template.manifest.nextSteps ?? []).map((line) => tokenReplace(line, tokens));
+): string[] => (template.manifest.nextSteps ?? []).map((line) => tokenReplace(line, tokens, tokenConfigOf(template)));

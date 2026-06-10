@@ -45,6 +45,7 @@ const overlay_1 = require("./overlay");
 const packageJson_1 = require("./packageJson");
 const manifest_1 = require("./manifest");
 const render_1 = require("./render");
+const tokens_1 = require("./tokens");
 /**
  * Authoring-only files that must not end up in generated output when the payload
  * lives at the template root (i.e. there is no separate `template/` subfolder).
@@ -52,9 +53,9 @@ const render_1 = require("./render");
 const PROPRIETARY_ENTRIES = [manifest_1.MANIFEST_FILENAME, 'features'];
 const tokensFromAnswers = (template, answers) => {
     const tokens = {};
-    for (const prompt of template.manifest.prompts) {
-        const token = prompt.token || prompt.name;
-        tokens[token] = answers[prompt.name] ?? prompt.default ?? '';
+    // Every detected/declared variable contributes a token value.
+    for (const v of (0, tokens_1.resolveVariables)(template)) {
+        tokens[v.token] = answers[v.name] ?? answers[v.token] ?? v.default;
     }
     return tokens;
 };
@@ -90,8 +91,9 @@ const assemble = (template, stagingDir, answers, features = {}, includeManifest 
     const tokens = (0, exports.tokensFromAnswers)(template, answers);
     for (const effect of effects)
         Object.assign(tokens, effect.tokens ?? {});
-    (0, render_1.detokenizeTree)(stagingDir, tokens, template.manifest.detokenize?.exclude ?? []);
-    (0, render_1.detokenizePaths)(stagingDir, tokens);
+    const cfg = (0, tokens_1.tokenConfigOf)(template);
+    (0, render_1.detokenizeTree)(stagingDir, tokens, template.manifest.detokenize?.exclude ?? [], cfg);
+    (0, render_1.detokenizePaths)(stagingDir, tokens, cfg);
     return tokens;
 };
 exports.assemble = assemble;
@@ -121,5 +123,5 @@ const mergeInto = ({ template, projectDir, answers, features = {}, force = false
     }
 };
 exports.mergeInto = mergeInto;
-const renderNextSteps = (template, tokens) => (template.manifest.nextSteps ?? []).map((line) => (0, render_1.tokenReplace)(line, tokens));
+const renderNextSteps = (template, tokens) => (template.manifest.nextSteps ?? []).map((line) => (0, render_1.tokenReplace)(line, tokens, (0, tokens_1.tokenConfigOf)(template)));
 exports.renderNextSteps = renderNextSteps;
