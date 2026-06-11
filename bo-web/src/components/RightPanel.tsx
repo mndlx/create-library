@@ -119,8 +119,9 @@ function PublishSection({ template, notify, reload }: SectionProps) {
     return (
         <Stack spacing={1.5}>
             <Typography variant="caption" color="text.secondary">
-                Exports a versioned snapshot to the local registry (<code>~/.virtuallab-create-library/published</code>).
-                The CLI automatically uses the latest published version of each template.
+                Publishes a versioned snapshot of the template — placeholders intact — to the local registry
+                (<code>~/.virtuallab-create-library/published</code>). The CLI uses the latest published version and
+                asks for the values at generation time.
             </Typography>
             <Stack direction="row" spacing={1} alignItems="center">
                 <TextField select size="small" label="Bump" value={bump} onChange={(e) => setBump(e.target.value as typeof bump)} sx={{ width: 120 }}>
@@ -130,7 +131,7 @@ function PublishSection({ template, notify, reload }: SectionProps) {
                     <MenuItem value="major">major</MenuItem>
                 </TextField>
                 <Button size="small" variant="contained" startIcon={<PublishIcon />} disabled={busy} onClick={() => doExport(false)}>
-                    Export version
+                    Publish version
                 </Button>
             </Stack>
             <Box>
@@ -184,6 +185,10 @@ function GenerateSection({ template, state, notify, onResult }: SectionProps & {
 
     return (
         <Stack spacing={1.5}>
+            <Typography variant="caption" color="text.secondary">
+                Replaces every {template.tokenConfig.start}token{template.tokenConfig.end} (in file contents and names)
+                with the values below and writes the result to the target directory.
+            </Typography>
             {template.variables.length > 0 && <Typography variant="caption" color="text.secondary">Variable values</Typography>}
             {template.variables.map((v) => (
                 v.type === 'select' ? (
@@ -227,7 +232,7 @@ function GenerateSection({ template, state, notify, onResult }: SectionProps & {
             <FormControlLabel control={<Checkbox size="small" checked={includeManifest} onChange={(e) => setIncludeManifest(e.target.checked)} />}
                 label={<Typography variant="body2">Include manifest files in output</Typography>} />
             <Stack direction="row" spacing={1}>
-                <Button variant="contained" startIcon={<RocketLaunchIcon />} onClick={generate}>Generate</Button>
+                <Button variant="contained" startIcon={<RocketLaunchIcon />} onClick={generate}>Export</Button>
                 <Button variant="outlined" onClick={savePreset}>Save preset…</Button>
             </Stack>
         </Stack>
@@ -314,11 +319,11 @@ export function RightPanel({ template, state, notify, reload, onResult }: PanelP
                     <VariablesPanel template={template} notify={notify} reload={reload} />
                 </Section>
                 <Divider />
-                <Section title="Generate" defaultExpanded>
+                <Section title="Export" defaultExpanded>
                     <GenerateSection template={template} state={state} notify={notify} reload={reload} onResult={onResult} />
                 </Section>
                 <Divider />
-                <Section title="Export & publish">
+                <Section title="Publish to registry">
                     <PublishSection template={template} state={state} notify={notify} reload={reload} />
                 </Section>
                 <Divider />

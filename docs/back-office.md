@@ -28,24 +28,27 @@ yarn bo:web:build
 - **Drawer** — the template list (resizable), the active **Workspace** (when a
   folder is opened), and the registered template dirs / cwd.
 
-## Views
+## Layout: editor + right panel
 
-### Editor
-A VSCode-style file editor (Monaco) over the selected template — or any folder
-opened via **Open folder…**. Resizable explorer, drag-and-drop move,
-selection-aware create, rename/delete with confirmation. `Ctrl+S` saves.
+The editor (center) is a VSCode-style Monaco editor over the selected template —
+or any folder opened via **Open folder…**. Resizable explorer, drag-and-drop
+move, selection-aware create, rename/delete with confirmation. `Ctrl+S` saves.
 
-### Generate
-Fill the template's variables, choose `new`/`merge` and a target directory, then
-generate. Optionally save a preset or include the manifest files in the output.
+Everything about the selected template lives in the resizable **right panel**:
 
-### Author
-- **Token configuration** — the `start`/`end` delimiters.
-- **Variables (inspector)** — auto-detected tokens with editable
-  question/default/type and a per-token CLI switch; **Sync from files** re-scans;
-  **Add variable** declares a new one.
-- **Add a component** — scaffolds a component + a feature toggle for it.
-- **Maintenance** — register an external templates directory; validate.
+- **Template settings** — title, description, version, output mode, validate.
+- **Variables** — token delimiters + the auto-detected inspector. Edits
+  **auto-save**; **Sync** re-scans after manual edits; per-token CLI switch.
+- **Export** — fill the variable values and produce output where every
+  placeholder is replaced (new folder or merge into an existing project);
+  presets; optional manifest inclusion.
+- **Publish to registry** — version bump (patch/minor/major) and a snapshot
+  (placeholders intact) into `~/.virtuallab-create-library/published`; the CLI
+  uses the latest published version of each template.
+- **Components & dirs** — component scaffolding; register external dirs.
+
+Unsaved editor changes are guarded: switching template or closing the page asks
+for confirmation.
 
 ## Persistence
 

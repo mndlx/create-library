@@ -156,13 +156,13 @@ export function GuideDialog({ open, onClose, onNewTemplate }: Props) {
                     </Typography>
                 </Step>
 
-                <Step n={4} title="Generate / merge into your app">
+                <Step n={4} title="Export into your app">
                     <Typography variant="body2">
-                        Open <b>Generate</b>. Fill the variables — <code>COMPONENT = Todo</code>,
-                        {' '}<code>TITLE = My tasks</code> — set <b>Mode</b> = <b>merge</b> and <b>Target directory</b> to
-                        your React project. Click <b>Generate</b>: every <code>@@COMPONENT@@</code> becomes <code>Todo</code>
-                        {' '}(in the file names and code) and <code>@@TITLE@@</code> becomes <code>My tasks</code>, written
-                        under <code>src/components/Todo/</code>.
+                        Open the <b>Export</b> section in the right panel. Fill the variables —
+                        {' '}<code>COMPONENT = Todo</code>, <code>TITLE = My tasks</code> — set <b>Mode</b> = <b>merge</b>
+                        {' '}and <b>Target directory</b> to your React project. Click <b>Export</b>: every
+                        {' '}<code>@@COMPONENT@@</code> becomes <code>Todo</code> (in the file names and code) and
+                        {' '}<code>@@TITLE@@</code> becomes <code>My tasks</code>, written under <code>src/components/Todo/</code>.
                     </Typography>
                 </Step>
 
@@ -177,10 +177,11 @@ export function GuideDialog({ open, onClose, onNewTemplate }: Props) {
                     <ul style={{ margin: 0, paddingLeft: 18 }}>
                         <li><b>New template</b> — top bar / drawer “+”.</li>
                         <li><b>Editor</b> — create & edit the template's files (VSCode-style).</li>
-                        <li><b>Right panel</b> — template settings, variables (auto-detected, auto-saved), generate, export & publish.</li>
-                        <li><b>Generate</b> — produce a new project, or merge into an existing one.</li>
+                        <li><b>Right panel</b> — template settings, variables (auto-detected, auto-saved), export, publish.</li>
+                        <li><b>Export</b> — produce output with every placeholder replaced by your values (new project or merge).</li>
+                        <li><b>Publish</b> — versioned snapshot (placeholders intact) to the local registry for the CLI.</li>
                         <li><b>Open folder…</b> — edit any directory directly, no manifest needed.</li>
-                        <li><b>Payload layout</b> — a template can keep files in a <code>template/</code> subfolder, or flat at its root. For flat templates the <code>template.json</code> is left out of the output unless you tick “Include manifest files” in Generate.</li>
+                        <li><b>Payload layout</b> — a template can keep files in a <code>template/</code> subfolder, or flat at its root. For flat templates the <code>template.json</code> is left out of the output unless you tick “Include manifest files” in Export.</li>
                     </ul>
                 </Typography>
             </DialogContent>

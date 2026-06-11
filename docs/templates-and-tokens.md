@@ -14,7 +14,7 @@ my-template/
 The `template/` subfolder is **optional**. A template may be *flat* — set
 `"source": "."` and keep the payload at the template root. For flat templates
 the authoring files (`template.json`, `features/`) are excluded from generated
-output unless you opt in ("Include manifest files" in Generate).
+output unless you opt in ("Include manifest files" in Export).
 
 ### Importing an existing directory
 
