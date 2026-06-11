@@ -24,11 +24,12 @@ export function CreateTemplateDialog({ open, defaultDir, onClose, notify, onCrea
     const [output, setOutput] = useState<OutputMode>('new');
     const [rootDir, setRootDir] = useState('');
     const [layout, setLayout] = useState<'template' | '.'>('template');
+    const [importFrom, setImportFrom] = useState('');
     const [busy, setBusy] = useState(false);
 
     useEffect(() => {
         if (open) {
-            setName(''); setTitle(''); setDescription(''); setOutput('new'); setRootDir(''); setLayout('template');
+            setName(''); setTitle(''); setDescription(''); setOutput('new'); setRootDir(''); setLayout('template'); setImportFrom('');
             setBusy(false);
         }
     }, [open]);
@@ -37,7 +38,7 @@ export function CreateTemplateDialog({ open, defaultDir, onClose, notify, onCrea
         if (!name.trim()) return notify('A template name is required', 'error');
         setBusy(true);
         try {
-            const r = await api.createTemplate({ name: name.trim(), title, description, output, rootDir: rootDir || defaultDir, source: layout });
+            const r = await api.createTemplate({ name: name.trim(), title, description, output, rootDir: rootDir || defaultDir, source: layout, importFrom: importFrom.trim() || undefined });
             notify(`Template created at ${r.dir}`, 'success');
             onCreated(r.name);
             onClose();
@@ -79,6 +80,11 @@ export function CreateTemplateDialog({ open, defaultDir, onClose, notify, onCrea
                         size="small" label="Create in directory" placeholder={defaultDir}
                         value={rootDir} onChange={(e) => setRootDir(e.target.value)}
                         helperText="Where the template folder is created. Auto-registered so it appears in the list."
+                    />
+                    <TextField
+                        size="small" label="Import from directory (optional)" placeholder="C:\\path\\to\\existing-project"
+                        value={importFrom} onChange={(e) => setImportFrom(e.target.value)}
+                        helperText="Copy an existing folder as the template payload (node_modules/.git excluded). Tokens are auto-detected. Leave empty to scaffold sample files."
                     />
                 </Stack>
             </DialogContent>

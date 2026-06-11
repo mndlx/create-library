@@ -33,9 +33,10 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.scaffoldTemplate = void 0;
+exports.importTemplate = exports.scaffoldTemplate = void 0;
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
+const fsx_1 = require("./fsx");
 const manifest_1 = require("./manifest");
 /** Create a new template skeleton (manifest + minimal payload). Returns its directory. */
 const scaffoldTemplate = ({ rootDir, name, title, description, output = 'new', source = 'template' }) => {
@@ -75,3 +76,36 @@ const scaffoldTemplate = ({ rootDir, name, title, description, output = 'new', s
     return templateDir;
 };
 exports.scaffoldTemplate = scaffoldTemplate;
+/**
+ * Turn an existing directory into a template: copy its contents as the payload
+ * (node_modules/.git etc. excluded) and write a minimal manifest. Tokens are
+ * auto-detected from the imported files. Returns the new template directory.
+ */
+const importTemplate = ({ rootDir, name, title, description, output = 'new', source = 'template', importFrom }) => {
+    const from = path.resolve(importFrom);
+    if (!fs.existsSync(from) || !fs.statSync(from).isDirectory())
+        throw new Error(`Import source is not a directory: ${from}`);
+    const templateDir = path.join(rootDir, name);
+    if (fs.existsSync(templateDir))
+        throw new Error(`Template already exists: ${templateDir}`);
+    const payloadDir = source === '.' ? templateDir : path.join(templateDir, source);
+    (0, fsx_1.copyDir)(from, payloadDir); // creates payloadDir (and templateDir) with the imported files
+    const manifest = {
+        name,
+        title: title || name,
+        description: description || '',
+        version: '1.0.0',
+        source,
+        output,
+        tokenConfig: { start: '@@', end: '@@' },
+        nameVar: 'name',
+        prompts: [],
+        detokenize: { exclude: [] },
+        packageJson: {},
+        hooks: { postGenerate: [] },
+        nextSteps: [],
+    };
+    fs.writeFileSync(path.join(templateDir, manifest_1.MANIFEST_FILENAME), JSON.stringify(manifest, null, 2) + '\n');
+    return templateDir;
+};
+exports.importTemplate = importTemplate;

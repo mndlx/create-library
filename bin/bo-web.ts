@@ -9,6 +9,7 @@ import {
     addTemplateDir,
     findTemplate,
     generate,
+    importTemplate,
     listTemplates,
     mergeInto,
     nameVarOf,
@@ -215,14 +216,18 @@ async function handleApi(
         if (!name) throw new Error('A template name is required');
         const rootDir = path.resolve(body.rootDir && String(body.rootDir).trim() ? body.rootDir : process.cwd());
         fs.mkdirSync(rootDir, { recursive: true });
-        const dir = scaffoldTemplate({
+        const opts = {
             rootDir,
             name,
             title: body.title,
             description: body.description,
-            output: body.output === 'merge' ? 'merge' : 'new',
+            output: (body.output === 'merge' ? 'merge' : 'new') as 'new' | 'merge',
             source: body.source === '.' ? '.' : 'template',
-        });
+        };
+        // If importFrom is given, copy that directory as the payload; else scaffold samples.
+        const dir = body.importFrom && String(body.importFrom).trim()
+            ? importTemplate({ ...opts, importFrom: String(body.importFrom).trim() })
+            : scaffoldTemplate(opts);
         // Make the new template discoverable by registering its parent directory.
         if (!resolveTemplateDirs().includes(rootDir)) addTemplateDir(rootDir);
         return sendJson(res, 200, { ok: true, dir, name });

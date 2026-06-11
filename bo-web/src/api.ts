@@ -98,7 +98,7 @@ export const api = {
     savePreset: (p: { templateName: string; answers: Record<string, string>; features: Record<string, boolean | string>; file: string }) =>
         req<{ file: string }>('/api/preset', p),
 
-    createTemplate: (p: { name: string; title: string; description: string; output: OutputMode; rootDir: string; source?: '.' | 'template' }) =>
+    createTemplate: (p: { name: string; title: string; description: string; output: OutputMode; rootDir: string; source?: '.' | 'template'; importFrom?: string }) =>
         req<{ dir: string; name: string }>('/api/create-template', p),
 
     addVariable: (p: { templateName: string; prompt: PromptDef }) => req<{ ok: true }>('/api/add-variable', p),

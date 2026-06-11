@@ -207,14 +207,18 @@ async function handleApi(req, res, pathname, query) {
             throw new Error('A template name is required');
         const rootDir = path.resolve(body.rootDir && String(body.rootDir).trim() ? body.rootDir : process.cwd());
         fs.mkdirSync(rootDir, { recursive: true });
-        const dir = (0, engine_1.scaffoldTemplate)({
+        const opts = {
             rootDir,
             name,
             title: body.title,
             description: body.description,
-            output: body.output === 'merge' ? 'merge' : 'new',
+            output: (body.output === 'merge' ? 'merge' : 'new'),
             source: body.source === '.' ? '.' : 'template',
-        });
+        };
+        // If importFrom is given, copy that directory as the payload; else scaffold samples.
+        const dir = body.importFrom && String(body.importFrom).trim()
+            ? (0, engine_1.importTemplate)({ ...opts, importFrom: String(body.importFrom).trim() })
+            : (0, engine_1.scaffoldTemplate)(opts);
         // Make the new template discoverable by registering its parent directory.
         if (!(0, engine_1.resolveTemplateDirs)().includes(rootDir))
             (0, engine_1.addTemplateDir)(rootDir);
