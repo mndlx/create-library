@@ -1,9 +1,20 @@
-import { Terminal } from '@virtual-registry/mandolin';
-import { ResolvedVariable, resolveVariables } from './tokens';
+import { Components, Terminal } from '@virtual-registry/mandolin';
+import { ResolvedVariable, resolveVariables, tokenConfigOf } from './tokens';
 import { LoadedTemplate } from './types';
 import { normalizePackageName } from './validators';
 
+const { text, divider } = Components;
+
 type State = Record<string, string>;
+
+/** Palette shared by the CLI prompts (256-color codes). */
+export const CLI_COLORS = {
+    accent: 51,   // cyan
+    ok: 82,       // green
+    warn: 214,    // orange
+    muted: 245,   // grey
+    token: 213,   // pink
+} as const;
 
 const applyValidator = (v: ResolvedVariable, value: string): string => {
     const fallback = v.default ?? '';
@@ -14,17 +25,30 @@ const applyValidator = (v: ResolvedVariable, value: string): string => {
 
 /** Drive the template's variables through a mandolin wizard and return the answers. */
 export const runTemplatePrompts = async (template: LoadedTemplate): Promise<State> => {
-    const wizard = new Terminal<State>();
     const variables = resolveVariables(template);
+    const asked = variables.filter((x) => x.exposeCli);
+    const cfg = tokenConfigOf(template);
 
     const initial: State = {};
     for (const v of variables) initial[v.name] = v.default;
+    if (!asked.length) return initial;
+
+    const wizard = new Terminal<State>();
     wizard.initState(initial);
 
-    // Only tokens exposed to the CLI are asked; the rest use their defaults.
-    for (const v of variables.filter((x) => x.exposeCli)) {
-        const label = v.default ? `${v.message} (default: ${v.default})` : v.message;
-        wizard.newLine(label);
+    wizard.newLine(divider());
+    wizard.newLine(
+        text(' VARIABLES ', { bgcolor: CLI_COLORS.accent, color: 16, effect: ['bold'] }) +
+        text(`  ${asked.length} value(s) — each replaces its token in the generated files`, { color: CLI_COLORS.muted })
+    );
+
+    for (const v of asked) {
+        const tokenBadge = text(`${cfg.start}${v.token}${cfg.end}`, { color: CLI_COLORS.token, effect: ['bold'] });
+        const hint = v.default
+            ? text(`  (Enter = ${v.default})`, { color: CLI_COLORS.muted })
+            : text('  (required)', { color: CLI_COLORS.warn });
+        wizard.newLine('');
+        wizard.newLine(`${tokenBadge}  ${text(v.message, { effect: ['bold'] })}${hint}`);
 
         if (v.type === 'select' && v.options && v.options.length) {
             const options = v.options;
@@ -57,8 +81,15 @@ export const runFeatureSelection = async (
     }
     wizard.initState(initial);
 
+    wizard.newLine(divider());
+    wizard.newLine(
+        text(' FEATURES ', { bgcolor: CLI_COLORS.ok, color: 16, effect: ['bold'] }) +
+        text('  optional parts of the output', { color: CLI_COLORS.muted })
+    );
+
     for (const f of features) {
-        wizard.newLine(f.label);
+        wizard.newLine('');
+        wizard.newLine(text('◆ ', { color: CLI_COLORS.ok }) + text(f.label, { effect: ['bold'] }));
         if (f.type === 'select' && f.options && f.options.length) {
             const options = f.options;
             wizard.newSelectLine(options, (sel, state) => ({ ...state, [f.id]: String(sel) }));

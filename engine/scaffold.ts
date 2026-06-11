@@ -39,7 +39,8 @@ export const scaffoldTemplate = ({ rootDir, name, title, description, output = '
         prompts: [
             {
                 name: 'name',
-                message: 'Provide a name for your project',
+                // In merge mode nothing is created from this name; it only fills the token.
+                message: output === 'merge' ? 'Name (fills the REPLACE token)' : 'Provide a name for your project',
                 type: 'text',
                 default: 'my-app',
                 token: 'REPLACE',
@@ -50,7 +51,7 @@ export const scaffoldTemplate = ({ rootDir, name, title, description, output = '
         detokenize: { exclude: [] },
         packageJson: {},
         hooks: { postGenerate: [] },
-        nextSteps: ['cd @@REPLACE@@', 'npm install'],
+        nextSteps: output === 'merge' ? [] : ['cd @@REPLACE@@', 'npm install'],
     };
     fs.writeFileSync(path.join(templateDir, MANIFEST_FILENAME), JSON.stringify(manifest, null, 2) + '\n');
 
