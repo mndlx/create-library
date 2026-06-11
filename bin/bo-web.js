@@ -69,6 +69,7 @@ const serialize = (t) => ({
     output: (0, engine_1.outputModeOf)(t),
     nameVar: (0, engine_1.nameVarOf)(t),
     dir: t.dir,
+    version: t.manifest.version ?? '1.0.0',
     prompts: t.manifest.prompts,
     features: t.manifest.features ?? [],
     tokenConfig: (0, engine_1.tokenConfigOf)(t),
@@ -234,6 +235,34 @@ async function handleApi(req, res, pathname, query) {
             throw new Error(errors.join('; '));
         (0, engine_1.writeRawManifest)(t.dir, m);
         return sendJson(res, 200, { ok: true });
+    }
+    // Update manifest metadata (title, description, version, output).
+    if (req.method === 'POST' && pathname === '/api/set-meta') {
+        const t = requireTemplate(body.templateName);
+        const m = (0, engine_1.readRawManifest)(t.dir);
+        if (body.title !== undefined)
+            m.title = String(body.title);
+        if (body.description !== undefined)
+            m.description = String(body.description);
+        if (body.version !== undefined)
+            m.version = String(body.version);
+        if (body.output !== undefined)
+            m.output = body.output === 'merge' ? 'merge' : 'new';
+        const errors = (0, engine_1.validateManifest)(m);
+        if (errors.length)
+            throw new Error(errors.join('; '));
+        (0, engine_1.writeRawManifest)(t.dir, m);
+        return sendJson(res, 200, { ok: true });
+    }
+    // Export (publish) a snapshot of the template into the local registry.
+    if (req.method === 'POST' && pathname === '/api/export') {
+        const t = requireTemplate(body.templateName);
+        const bump = ['patch', 'minor', 'major'].includes(body.bump) ? body.bump : undefined;
+        const result = (0, engine_1.exportTemplate)(t, { bump, overwrite: !!body.overwrite });
+        return sendJson(res, 200, { ok: true, ...result });
+    }
+    if (req.method === 'GET' && pathname === '/api/published') {
+        return sendJson(res, 200, { ok: true, versions: (0, engine_1.listPublishedVersions)(query.template || undefined) });
     }
     if (req.method === 'POST' && pathname === '/api/set-token-config') {
         const t = requireTemplate(body.templateName);

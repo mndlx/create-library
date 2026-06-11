@@ -38,6 +38,7 @@ const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const config_1 = require("./config");
 const manifest_1 = require("./manifest");
+const publish_1 = require("./publish");
 /** Discover every valid template across the resolved roots (first name wins). */
 const listTemplates = () => {
     const out = [];
@@ -70,6 +71,9 @@ const listTemplates = () => {
         for (const entry of entries)
             tryLoad(path.join(root, entry));
     }
+    // Published snapshots come last so a local working copy shadows them.
+    for (const dir of (0, publish_1.latestPublishedDirs)())
+        tryLoad(dir);
     return out;
 };
 exports.listTemplates = listTemplates;

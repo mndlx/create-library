@@ -116,7 +116,7 @@ export function GuideDialog({ open, onClose, onNewTemplate }: Props) {
                     or merges them into an existing one (<Chip size="small" label="merge" color="warning" variant="outlined" sx={{ height: 18 }} />),
                     replacing <b>dynamic tokens</b> like <code>@@name@@</code> with answers you give at generation time.
                     The delimiters (<code>@@</code>…<code>@@</code> by default) are configurable per template in
-                    {' '}<b>Author → Token configuration</b>.
+                    the <b>Variables</b> section of the right panel.
                 </Typography>
 
                 <Divider sx={{ my: 2 }} />
@@ -134,7 +134,7 @@ export function GuideDialog({ open, onClose, onNewTemplate }: Props) {
 
                 <Step n={2} title="Add files using dynamic tokens">
                     <Typography variant="body2">
-                        Go to the <b>Editor</b> tab. Create
+                        In the editor (center), create
                         {' '}<code>template/src/components/@@COMPONENT@@/@@COMPONENT@@.tsx</code> — note the token is in the
                         {' '}<b>path</b> too — and paste:
                     </Typography>
@@ -149,7 +149,7 @@ export function GuideDialog({ open, onClose, onNewTemplate }: Props) {
 
                 <Step n={3} title="Tune the variables in the inspector">
                     <Typography variant="body2">
-                        Open <b>Author</b>. The inspector auto-lists <code>@@COMPONENT@@</code> and <code>@@TITLE@@</code>
+                        Open the <b>Variables</b> section in the right panel. It auto-lists <code>@@COMPONENT@@</code> and <code>@@TITLE@@</code>
                         {' '}(hit <b>Sync from files</b> if you edited manually). Set a question and default for each —
                         e.g. <code>TITLE</code> default <code>To-Do</code> — and toggle <b>CLI</b> to choose whether the
                         command-line generator asks for it. Click <b>Save</b> on each.
@@ -177,7 +177,7 @@ export function GuideDialog({ open, onClose, onNewTemplate }: Props) {
                     <ul style={{ margin: 0, paddingLeft: 18 }}>
                         <li><b>New template</b> — top bar / drawer “+”.</li>
                         <li><b>Editor</b> — create & edit the template's files (VSCode-style).</li>
-                        <li><b>Author</b> — token delimiters + the auto-detected variable inspector (question, default, CLI exposure).</li>
+                        <li><b>Right panel</b> — template settings, variables (auto-detected, auto-saved), generate, export & publish.</li>
                         <li><b>Generate</b> — produce a new project, or merge into an existing one.</li>
                         <li><b>Open folder…</b> — edit any directory directly, no manifest needed.</li>
                         <li><b>Payload layout</b> — a template can keep files in a <code>template/</code> subfolder, or flat at its root. For flat templates the <code>template.json</code> is left out of the output unless you tick “Include manifest files” in Generate.</li>

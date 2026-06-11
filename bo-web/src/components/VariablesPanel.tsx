@@ -1,11 +1,11 @@
 import AddIcon from '@mui/icons-material/Add';
+import CheckIcon from '@mui/icons-material/Check';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import SyncIcon from '@mui/icons-material/Sync';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import Card from '@mui/material/Card';
-import CardContent from '@mui/material/CardContent';
 import Chip from '@mui/material/Chip';
+import CircularProgress from '@mui/material/CircularProgress';
 import Divider from '@mui/material/Divider';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import IconButton from '@mui/material/IconButton';
@@ -24,29 +24,57 @@ interface Props {
     reload: () => void;
 }
 
+type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
+
+function SaveStatus({ state }: { state: SaveState }) {
+    if (state === 'saving') return <CircularProgress size={14} />;
+    if (state === 'saved') return <CheckIcon sx={{ fontSize: 16, color: 'success.main' }} />;
+    if (state === 'dirty') return <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'warning.main' }} />;
+    if (state === 'error') return <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'error.main' }} />;
+    return null;
+}
+
 function VariableRow({ template, v, notify, reload }: { template: Template; v: Variable } & Omit<Props, 'template'>) {
-    const [message, setMessage] = useState(v.message);
-    const [def, setDef] = useState(v.default);
-    const [type, setType] = useState(v.type);
-    const [options, setOptions] = useState((v.options ?? []).join(', '));
-    const [exposeCli, setExposeCli] = useState(v.exposeCli);
+    const [form, setForm] = useState({
+        message: v.message, def: v.default, type: v.type,
+        options: (v.options ?? []).join(', '), exposeCli: v.exposeCli,
+    });
+    const [state, setState] = useState<SaveState>('idle');
 
-    useEffect(() => { setMessage(v.message); setDef(v.default); setType(v.type); setOptions((v.options ?? []).join(', ')); setExposeCli(v.exposeCli); }, [v]);
+    // Reset when the variable changes identity/content from a re-scan.
+    useEffect(() => {
+        setForm({ message: v.message, def: v.default, type: v.type, options: (v.options ?? []).join(', '), exposeCli: v.exposeCli });
+        setState('idle');
+    }, [v]);
 
-    const save = async () => {
-        try {
-            await api.setVariable({
-                templateName: template.name,
-                variable: {
-                    name: v.name, token: v.token, message, type, default: def, validate: v.validate,
-                    options: type === 'select' ? options.split(',').map((s) => s.trim()).filter(Boolean) : undefined,
-                    exposeCli,
-                },
-            });
-            notify(`Saved ${v.token}`, 'success');
-            reload();
-        } catch (e) { notify((e as Error).message, 'error'); }
+    const update = (patch: Partial<typeof form>) => {
+        setForm((f) => ({ ...f, ...patch }));
+        setState('dirty');
     };
+
+    // Debounced auto-save: persists ~700ms after the last edit.
+    useEffect(() => {
+        if (state !== 'dirty') return;
+        const id = window.setTimeout(async () => {
+            setState('saving');
+            try {
+                await api.setVariable({
+                    templateName: template.name,
+                    variable: {
+                        name: v.name, token: v.token, message: form.message, type: form.type,
+                        default: form.def, validate: v.validate,
+                        options: form.type === 'select' ? form.options.split(',').map((s) => s.trim()).filter(Boolean) : undefined,
+                        exposeCli: form.exposeCli,
+                    },
+                });
+                setState('saved');
+            } catch (e) {
+                setState('error');
+                notify((e as Error).message, 'error');
+            }
+        }, 700);
+        return () => window.clearTimeout(id);
+    }, [form, state, template.name, v, notify]);
 
     const remove = async () => {
         try { await api.removeVariable({ templateName: template.name, token: v.token }); notify('Removed', 'info'); reload(); }
@@ -58,32 +86,34 @@ function VariableRow({ template, v, notify, reload }: { template: Template; v: V
     return (
         <Box sx={{ py: 1.5, borderBottom: 1, borderColor: 'divider' }}>
             <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-                <Typography sx={{ fontFamily: 'ui-monospace, monospace', fontWeight: 600 }}>{tk}</Typography>
+                <Typography sx={{ fontFamily: 'ui-monospace, monospace', fontWeight: 600, fontSize: 13 }}>{tk}</Typography>
                 {v.detected
-                    ? <Chip size="small" label="auto-detected" color="secondary" variant="outlined" sx={{ height: 18 }} />
+                    ? <Chip size="small" label="in files" color="secondary" variant="outlined" sx={{ height: 18 }} />
                     : <Chip size="small" label="not in files" color="warning" variant="outlined" sx={{ height: 18 }} />}
+                <SaveStatus state={state} />
                 <Box sx={{ flex: 1 }} />
                 <Tooltip title="Remove saved metadata">
                     <IconButton size="small" onClick={remove}><DeleteOutlineIcon fontSize="small" /></IconButton>
                 </Tooltip>
             </Stack>
-            <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} alignItems={{ md: 'center' }}>
-                <TextField size="small" label="Question" value={message} onChange={(e) => setMessage(e.target.value)} sx={{ flex: 2 }} />
-                <TextField size="small" label="Default" value={def} onChange={(e) => setDef(e.target.value)} sx={{ flex: 1 }} />
-                <TextField select size="small" label="Type" value={type} onChange={(e) => setType(e.target.value as Variable['type'])} sx={{ width: 120 }}>
-                    <MenuItem value="text">text</MenuItem>
-                    <MenuItem value="select">select</MenuItem>
-                </TextField>
-                {type === 'select' && (
-                    <TextField size="small" label="Options (comma)" value={options} onChange={(e) => setOptions(e.target.value)} sx={{ flex: 1 }} />
+            <Stack spacing={1.25}>
+                <TextField size="small" label="Question asked at generation" value={form.message} onChange={(e) => update({ message: e.target.value })} />
+                <Stack direction="row" spacing={1}>
+                    <TextField size="small" label="Default" value={form.def} onChange={(e) => update({ def: e.target.value })} sx={{ flex: 1 }} />
+                    <TextField select size="small" label="Type" value={form.type} onChange={(e) => update({ type: e.target.value as Variable['type'] })} sx={{ width: 100 }}>
+                        <MenuItem value="text">text</MenuItem>
+                        <MenuItem value="select">select</MenuItem>
+                    </TextField>
+                </Stack>
+                {form.type === 'select' && (
+                    <TextField size="small" label="Options (comma-separated)" value={form.options} onChange={(e) => update({ options: e.target.value })} />
                 )}
-                <Tooltip title="Ask for this token in the CLI">
+                <Tooltip title="Ask for this token in the CLI (off = its default is used)">
                     <FormControlLabel
-                        control={<Switch size="small" checked={exposeCli} onChange={(e) => setExposeCli(e.target.checked)} />}
-                        label="CLI" sx={{ m: 0 }}
+                        control={<Switch size="small" checked={form.exposeCli} onChange={(e) => update({ exposeCli: e.target.checked })} />}
+                        label={<Typography variant="caption">Expose in CLI</Typography>} sx={{ m: 0 }}
                     />
                 </Tooltip>
-                <Button size="small" variant="contained" onClick={save}>Save</Button>
             </Stack>
         </Box>
     );
@@ -100,6 +130,8 @@ export function VariablesPanel({ template, notify, reload }: Props) {
         try { await api.setTokenConfig({ templateName: template.name, start, end }); notify('Token delimiters saved', 'success'); reload(); }
         catch (e) { notify((e as Error).message, 'error'); }
     };
+
+    const delimitersDirty = start !== template.tokenConfig.start || end !== template.tokenConfig.end;
 
     const addVariable = async () => {
         const token = newToken.trim();
@@ -118,55 +150,43 @@ export function VariablesPanel({ template, notify, reload }: Props) {
     };
 
     return (
-        <>
-            <Card variant="outlined" sx={{ mb: 2 }}>
-                <CardContent>
-                    <Typography variant="overline" color="text.secondary">Token configuration</Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-                        Wrap a dynamic token in your files as <code>{start}name{end}</code>. Anything matching this becomes a variable below.
-                    </Typography>
-                    <Stack direction="row" spacing={1.5} alignItems="center">
-                        <TextField size="small" label="Start" value={start} onChange={(e) => setStart(e.target.value)} sx={{ width: 120 }} />
-                        <TextField size="small" label="End" value={end} onChange={(e) => setEnd(e.target.value)} sx={{ width: 120 }} />
-                        <Chip label={`${start}example${end}`} sx={{ fontFamily: 'ui-monospace, monospace' }} variant="outlined" />
-                        <Box sx={{ flex: 1 }} />
-                        <Button variant="contained" onClick={saveConfig}>Save</Button>
-                    </Stack>
-                </CardContent>
-            </Card>
+        <Box>
+            <Typography variant="caption" color="text.secondary">
+                Write <code>{start}name{end}</code> in any file (content or filename) and it becomes a variable here.
+                Edits save automatically.
+            </Typography>
 
-            <Card variant="outlined" sx={{ mb: 2 }}>
-                <CardContent>
-                    <Stack direction="row" alignItems="center" spacing={1}>
-                        <Typography variant="overline" color="text.secondary" sx={{ flex: 1 }}>Variables (inspector)</Typography>
-                        <Button size="small" startIcon={<SyncIcon />} onClick={reload}>Sync from files</Button>
-                    </Stack>
-                    <Typography variant="body2" color="text.secondary">
-                        Auto-detected from the template files. “Sync from files” re-scans after manual edits. Set the question, default and whether the CLI asks for each.
-                    </Typography>
-                    <Divider sx={{ mt: 1 }} />
-                    {template.variables.length === 0 && (
-                        <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
-                            No tokens yet. Use <code>{start}name{end}</code> in a file or filename in the Editor, or add one below.
-                        </Typography>
-                    )}
-                    {template.variables.map((v) => (
-                        <VariableRow key={v.token} template={template} v={v} notify={notify} reload={reload} />
-                    ))}
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1.5 }}>
+                <TextField size="small" label="Start" value={start} onChange={(e) => setStart(e.target.value)} sx={{ width: 90 }} />
+                <TextField size="small" label="End" value={end} onChange={(e) => setEnd(e.target.value)} sx={{ width: 90 }} />
+                <Button size="small" variant={delimitersDirty ? 'contained' : 'outlined'} onClick={saveConfig} disabled={!delimitersDirty}>
+                    Apply
+                </Button>
+                <Box sx={{ flex: 1 }} />
+                <Tooltip title="Re-scan the template files for tokens (after manual edits)">
+                    <Button size="small" startIcon={<SyncIcon />} onClick={reload}>Sync</Button>
+                </Tooltip>
+            </Stack>
 
-                    <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 2 }}>
-                        <TextField
-                            size="small" label="New token name" placeholder="apiUrl" value={newToken}
-                            onChange={(e) => setNewToken(e.target.value)}
-                            onKeyDown={(e) => { if (e.key === 'Enter') addVariable(); }}
-                            InputProps={{ startAdornment: <Box component="span" sx={{ color: 'text.secondary', mr: 0.5, fontFamily: 'ui-monospace, monospace' }}>{start}</Box>,
-                                endAdornment: <Box component="span" sx={{ color: 'text.secondary', ml: 0.5, fontFamily: 'ui-monospace, monospace' }}>{end}</Box> }}
-                            sx={{ width: 280 }}
-                        />
-                        <Button variant="contained" startIcon={<AddIcon />} onClick={addVariable}>Add variable</Button>
-                    </Stack>
-                </CardContent>
-            </Card>
-        </>
+            <Divider sx={{ my: 1.5 }} />
+
+            {template.variables.length === 0 && (
+                <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
+                    No tokens yet — use <code>{start}name{end}</code> in the editor, or add one below.
+                </Typography>
+            )}
+            {template.variables.map((v) => (
+                <VariableRow key={v.token} template={template} v={v} notify={notify} reload={reload} />
+            ))}
+
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1.5 }}>
+                <TextField
+                    size="small" label="New token" placeholder="apiUrl" value={newToken} fullWidth
+                    onChange={(e) => setNewToken(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') addVariable(); }}
+                />
+                <Button variant="contained" startIcon={<AddIcon />} onClick={addVariable} sx={{ flexShrink: 0 }}>Add</Button>
+            </Stack>
+        </Box>
     );
 }

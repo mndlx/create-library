@@ -7,9 +7,11 @@ import {
     LoadedTemplate,
     PromptDef,
     addTemplateDir,
+    exportTemplate,
     findTemplate,
     generate,
     importTemplate,
+    listPublishedVersions,
     listTemplates,
     mergeInto,
     nameVarOf,
@@ -57,6 +59,7 @@ const serialize = (t: LoadedTemplate) => ({
     output: outputModeOf(t),
     nameVar: nameVarOf(t),
     dir: t.dir,
+    version: t.manifest.version ?? '1.0.0',
     prompts: t.manifest.prompts,
     features: t.manifest.features ?? [],
     tokenConfig: tokenConfigOf(t),
@@ -242,6 +245,32 @@ async function handleApi(
         if (errors.length) throw new Error(errors.join('; '));
         writeRawManifest(t.dir, m);
         return sendJson(res, 200, { ok: true });
+    }
+
+    // Update manifest metadata (title, description, version, output).
+    if (req.method === 'POST' && pathname === '/api/set-meta') {
+        const t = requireTemplate(body.templateName);
+        const m = readRawManifest(t.dir);
+        if (body.title !== undefined) m.title = String(body.title);
+        if (body.description !== undefined) m.description = String(body.description);
+        if (body.version !== undefined) m.version = String(body.version);
+        if (body.output !== undefined) m.output = body.output === 'merge' ? 'merge' : 'new';
+        const errors = validateManifest(m);
+        if (errors.length) throw new Error(errors.join('; '));
+        writeRawManifest(t.dir, m);
+        return sendJson(res, 200, { ok: true });
+    }
+
+    // Export (publish) a snapshot of the template into the local registry.
+    if (req.method === 'POST' && pathname === '/api/export') {
+        const t = requireTemplate(body.templateName);
+        const bump = ['patch', 'minor', 'major'].includes(body.bump) ? body.bump : undefined;
+        const result = exportTemplate(t, { bump, overwrite: !!body.overwrite });
+        return sendJson(res, 200, { ok: true, ...result });
+    }
+
+    if (req.method === 'GET' && pathname === '/api/published') {
+        return sendJson(res, 200, { ok: true, versions: listPublishedVersions(query.template || undefined) });
     }
 
     if (req.method === 'POST' && pathname === '/api/set-token-config') {

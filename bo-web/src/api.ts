@@ -44,10 +44,17 @@ export interface Template {
     output: OutputMode;
     nameVar: string;
     dir: string;
+    version: string;
     prompts: PromptDef[];
     features: FeatureDef[];
     tokenConfig: TokenConfig;
     variables: Variable[];
+}
+
+export interface PublishedVersion {
+    name: string;
+    version: string;
+    dir: string;
 }
 
 export interface AppState {
@@ -105,6 +112,11 @@ export const api = {
     setVariable: (p: { templateName: string; variable: Omit<Variable, 'detected'> }) => req<{ ok: true }>('/api/set-variable', p),
     removeVariable: (p: { templateName: string; token: string }) => req<{ ok: true }>('/api/remove-variable', p),
     setTokenConfig: (p: { templateName: string; start: string; end: string }) => req<{ ok: true }>('/api/set-token-config', p),
+    setMeta: (p: { templateName: string; title?: string; description?: string; version?: string; output?: OutputMode }) =>
+        req<{ ok: true }>('/api/set-meta', p),
+    exportTemplate: (p: { templateName: string; bump?: 'patch' | 'minor' | 'major'; overwrite?: boolean }) =>
+        req<{ name: string; version: string; dir: string }>('/api/export', p),
+    published: (template: string) => req<{ versions: PublishedVersion[] }>('/api/published?' + qs({ template })),
     addComponent: (p: { templateName: string; component: string; default: boolean }) =>
         req<{ ok: true }>('/api/add-component', p),
     setOutput: (p: { templateName: string; output: OutputMode }) => req<{ ok: true }>('/api/set-output', p),

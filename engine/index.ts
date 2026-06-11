@@ -2,6 +2,7 @@ export * from './types';
 export * from './config';
 export * from './manifest';
 export * from './tokens';
+export * from './publish';
 export * from './registry';
 export * from './features';
 export * from './overlay';

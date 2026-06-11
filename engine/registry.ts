@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { resolveTemplateDirs } from './config';
 import { loadManifest, MANIFEST_FILENAME } from './manifest';
+import { latestPublishedDirs } from './publish';
 import { LoadedTemplate } from './types';
 
 /** Discover every valid template across the resolved roots (first name wins). */
@@ -33,6 +34,9 @@ export const listTemplates = (): LoadedTemplate[] => {
         }
         for (const entry of entries) tryLoad(path.join(root, entry));
     }
+
+    // Published snapshots come last so a local working copy shadows them.
+    for (const dir of latestPublishedDirs()) tryLoad(dir);
 
     return out;
 };

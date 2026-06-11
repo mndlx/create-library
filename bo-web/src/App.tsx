@@ -4,6 +4,7 @@ import CodeIcon from '@mui/icons-material/Code';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import Alert from '@mui/material/Alert';
 import AppBar from '@mui/material/AppBar';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -17,36 +18,32 @@ import IconButton from '@mui/material/IconButton';
 import List from '@mui/material/List';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
-import Alert from '@mui/material/Alert';
 import Snackbar from '@mui/material/Snackbar';
 import Stack from '@mui/material/Stack';
-import Tab from '@mui/material/Tab';
-import Tabs from '@mui/material/Tabs';
 import Toolbar from '@mui/material/Toolbar';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, type AppState, type FileTarget, type Template } from './api';
-import { AuthorView } from './components/AuthorView';
 import { CreateTemplateDialog } from './components/CreateTemplateDialog';
-import { GuideDialog } from './components/GuideDialog';
 import { useDialogs } from './components/dialogs';
 import { EditorView } from './components/EditorView';
-import { GenerateView } from './components/GenerateView';
+import { GuideDialog } from './components/GuideDialog';
+import { RightPanel } from './components/RightPanel';
 
-type View = 'editor' | 'generate' | 'author';
 type Severity = 'success' | 'error' | 'info';
 
 export function App() {
     const [state, setState] = useState<AppState>({ templates: [], dirs: [], cwd: '' });
     const [selected, setSelected] = useState<string | null>(null);
     const [workspace, setWorkspace] = useState<string | null>(null);
-    const [view, setView] = useState<View>('editor');
-    const [drawerW, setDrawerW] = useState(280);
+    const [drawerW, setDrawerW] = useState(260);
+    const [panelW, setPanelW] = useState(380);
     const [snack, setSnack] = useState<{ msg: string; sev: Severity } | null>(null);
     const [result, setResult] = useState<unknown>(null);
     const [createOpen, setCreateOpen] = useState(false);
     const [guideOpen, setGuideOpen] = useState(false);
+    const dirtyRef = useRef(0);
 
     // Show the guide automatically on the first visit.
     useEffect(() => {
@@ -60,31 +57,46 @@ export function App() {
         }
     }, []);
 
-    const { prompt } = useDialogs();
+    const { prompt, confirm } = useDialogs();
     const notify = useCallback((msg: string, sev: Severity = 'info') => setSnack({ msg, sev }), []);
 
-    const startDrawerResize = (e: React.MouseEvent) => {
-        e.preventDefault();
-        const startX = e.clientX;
-        const startW = drawerW;
-        const onMove = (ev: MouseEvent) => setDrawerW(Math.min(520, Math.max(200, startW + ev.clientX - startX)));
-        const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
-        window.addEventListener('mousemove', onMove);
-        window.addEventListener('mouseup', onUp);
-    };
+    /** Block navigation away from unsaved editor changes unless confirmed. */
+    const guardDirty = useCallback(async (): Promise<boolean> => {
+        if (!dirtyRef.current) return true;
+        return confirm({
+            title: 'Unsaved changes',
+            message: `${dirtyRef.current} file(s) have unsaved changes. Discard them?`,
+            confirmText: 'Discard',
+            danger: true,
+        });
+    }, [confirm]);
+
+    const resizer = (set: (w: number) => void, get: () => number, min: number, max: number, invert = false) =>
+        (e: React.MouseEvent) => {
+            e.preventDefault();
+            const startX = e.clientX;
+            const startW = get();
+            const onMove = (ev: MouseEvent) => {
+                const delta = invert ? startX - ev.clientX : ev.clientX - startX;
+                set(Math.min(max, Math.max(min, startW + delta)));
+            };
+            const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+            window.addEventListener('mousemove', onMove);
+            window.addEventListener('mouseup', onUp);
+        };
 
     const WS_KEY = 'bo-workspace';
 
     const openWorkspace = useCallback((dir: string) => {
         setWorkspace(dir);
-        setView('editor');
         try { localStorage.setItem(WS_KEY, dir); } catch { /* storage blocked */ }
     }, []);
 
-    const closeWorkspace = useCallback(() => {
+    const closeWorkspace = useCallback(async () => {
+        if (!(await guardDirty())) return;
         setWorkspace(null);
         try { localStorage.removeItem(WS_KEY); } catch { /* storage blocked */ }
-    }, []);
+    }, [guardDirty]);
 
     const openFolder = useCallback(async () => {
         const dir = await prompt({
@@ -96,13 +108,14 @@ export function App() {
             confirmText: 'Open',
         });
         if (!dir) return;
+        if (!(await guardDirty())) return;
         try {
             await api.files({ root: dir }); // validate it exists/readable
             openWorkspace(dir);
         } catch (e) {
             notify((e as Error).message, 'error');
         }
-    }, [prompt, state.cwd, notify, openWorkspace]);
+    }, [prompt, state.cwd, notify, openWorkspace, guardDirty]);
 
     // Restore the last opened workspace across reloads/restarts.
     useEffect(() => {
@@ -113,12 +126,6 @@ export function App() {
             .then(() => openWorkspace(saved!))
             .catch(() => { try { localStorage.removeItem(WS_KEY); } catch { /* ignore */ } });
     }, [openWorkspace]);
-
-    const registerWorkspace = useCallback(async () => {
-        if (!workspace) return;
-        try { await api.addDir({ dir: workspace }); notify('Registered as templates directory', 'success'); reload(); }
-        catch (e) { notify((e as Error).message, 'error'); }
-    }, [workspace, notify]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const reload = useCallback(async () => {
         try {
@@ -132,10 +139,22 @@ export function App() {
 
     useEffect(() => { reload(); }, [reload]);
 
+    const registerWorkspace = useCallback(async () => {
+        if (!workspace) return;
+        try { await api.addDir({ dir: workspace }); notify('Registered as templates directory', 'success'); reload(); }
+        catch (e) { notify((e as Error).message, 'error'); }
+    }, [workspace, notify, reload]);
+
     const template: Template | null = state.templates.find((t) => t.name === selected) ?? null;
 
-    const selectTemplate = (name: string) => { closeWorkspace(); setSelected(name); };
-    const onCreated = (name: string) => { reload().then(() => { selectTemplate(name); setView('editor'); }); };
+    const selectTemplate = async (name: string) => {
+        if (name === selected && !workspace) return;
+        if (!(await guardDirty())) return;
+        setWorkspace(null);
+        try { localStorage.removeItem(WS_KEY); } catch { /* ignore */ }
+        setSelected(name);
+    };
+    const onCreated = (name: string) => { reload().then(() => { selectTemplate(name); }); };
 
     const editorTarget: FileTarget | null = workspace ? { root: workspace } : template ? { template: template.name } : null;
     const editorKey = workspace ?? template?.name ?? '';
@@ -148,13 +167,6 @@ export function App() {
                     <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>create-library</Typography>
                     <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>· back-office</Typography>
                     <Box sx={{ flex: 1 }} />
-                    {template && !workspace && (
-                        <Tabs value={view} onChange={(_, v) => setView(v)} sx={{ minHeight: 0, mr: 2 }}>
-                            <Tab label="Editor" value="editor" sx={{ minHeight: 0, py: 1 }} />
-                            <Tab label="Generate" value="generate" sx={{ minHeight: 0, py: 1 }} />
-                            <Tab label="Author" value="author" sx={{ minHeight: 0, py: 1 }} />
-                        </Tabs>
-                    )}
                     <Button size="small" startIcon={<AddIcon />} variant="outlined" onClick={() => setCreateOpen(true)} sx={{ mr: 1 }}>
                         New template
                     </Button>
@@ -170,7 +182,7 @@ export function App() {
             <Drawer variant="permanent" sx={{ width: drawerW, flexShrink: 0, '& .MuiDrawer-paper': { width: drawerW, boxSizing: 'border-box', overflow: 'hidden' } }}>
                 <Toolbar variant="dense" />
                 <Box
-                    onMouseDown={startDrawerResize}
+                    onMouseDown={resizer(setDrawerW, () => drawerW, 200, 520)}
                     sx={{ position: 'absolute', top: 0, right: 0, width: '5px', height: '100%', cursor: 'col-resize', zIndex: 2, '&:hover': { bgcolor: 'primary.main' } }}
                 />
                 <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -187,10 +199,11 @@ export function App() {
                                     primary={
                                         <Stack direction="row" spacing={1} alignItems="center">
                                             <span>{t.name}</span>
+                                            <Chip size="small" label={`v${t.version}`} variant="outlined" sx={{ height: 18, fontSize: 10 }} />
                                             <Chip size="small" label={t.output} variant="outlined" color={t.output === 'merge' ? 'warning' : 'secondary'} sx={{ height: 18, fontSize: 10 }} />
                                         </Stack>
                                     }
-                                    secondary={`${t.prompts.length} var · ${t.features.length} feat`}
+                                    secondary={`${t.variables.length} var · ${t.features.length} feat`}
                                 />
                             </ListItemButton>
                         ))}
@@ -198,6 +211,7 @@ export function App() {
                             <Stack spacing={1} sx={{ px: 2, py: 1 }}>
                                 <Typography variant="body2" color="text.secondary">No templates yet.</Typography>
                                 <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>New template</Button>
+                                <Button size="small" variant="outlined" startIcon={<HelpOutlineIcon />} onClick={() => setGuideOpen(true)}>Open the guide</Button>
                             </Stack>
                         )}
                     </List>
@@ -229,21 +243,37 @@ export function App() {
 
             <Box component="main" sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                 <Toolbar variant="dense" />
-                <Box sx={{ flex: 1, minHeight: 0 }}>
-                    {workspace && editorTarget ? (
-                        <EditorView target={editorTarget} targetKey={editorKey} notify={notify} />
-                    ) : !template ? (
-                        <Box sx={{ p: 4, color: 'text.secondary', height: '100%', overflow: 'auto' }}>
-                            <Typography sx={{ mb: 1 }}>No template selected. Create one below, register a templates directory, or use “Open folder…” to edit any workspace.</Typography>
-                            <Button variant="outlined" size="small" startIcon={<HelpOutlineIcon />} onClick={() => setGuideOpen(true)} sx={{ mb: 2 }}>Open the guide</Button>
-                            <AuthorView template={null} state={state} notify={notify} reload={reload} onCreated={onCreated} />
+                <Box sx={{ flex: 1, minHeight: 0, display: 'flex' }}>
+                    {!editorTarget ? (
+                        <Box sx={{ p: 4, color: 'text.secondary' }}>
+                            <Typography sx={{ mb: 1 }}>No template selected. Create one, or use “Open folder…” to edit any workspace.</Typography>
+                            <Stack direction="row" spacing={1}>
+                                <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={() => setCreateOpen(true)}>New template</Button>
+                                <Button variant="outlined" size="small" startIcon={<HelpOutlineIcon />} onClick={() => setGuideOpen(true)}>Open the guide</Button>
+                            </Stack>
                         </Box>
-                    ) : view === 'editor' && editorTarget ? (
-                        <EditorView target={editorTarget} targetKey={editorKey} notify={notify} />
-                    ) : view === 'generate' ? (
-                        <GenerateView template={template} state={state} notify={notify} onResult={setResult} />
                     ) : (
-                        <AuthorView template={template} state={state} notify={notify} reload={reload} onCreated={onCreated} />
+                        <>
+                            <Box sx={{ flex: 1, minWidth: 0 }}>
+                                <EditorView
+                                    target={editorTarget}
+                                    targetKey={editorKey}
+                                    notify={notify}
+                                    onDirtyChange={(n) => { dirtyRef.current = n; }}
+                                />
+                            </Box>
+                            {template && !workspace && (
+                                <>
+                                    <Box
+                                        onMouseDown={resizer(setPanelW, () => panelW, 300, 640, true)}
+                                        sx={{ width: '5px', cursor: 'col-resize', flexShrink: 0, borderLeft: 1, borderColor: 'divider', '&:hover': { bgcolor: 'primary.main' } }}
+                                    />
+                                    <Box sx={{ width: panelW, flexShrink: 0, borderLeft: 1, borderColor: 'divider', minHeight: 0 }}>
+                                        <RightPanel template={template} state={state} notify={notify} reload={reload} onResult={setResult} />
+                                    </Box>
+                                </>
+                            )}
+                        </>
                     )}
                 </Box>
             </Box>

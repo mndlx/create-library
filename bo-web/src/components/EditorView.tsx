@@ -39,9 +39,11 @@ interface Props {
     /** Stable id used for the Monaco model path / reset key. */
     targetKey: string;
     notify: (msg: string, sev?: 'success' | 'error' | 'info') => void;
+    /** Reports how many open files have unsaved changes. */
+    onDirtyChange?: (count: number) => void;
 }
 
-export function EditorView({ target, targetKey, notify }: Props) {
+export function EditorView({ target, targetKey, notify, onDirtyChange }: Props) {
     const { prompt, confirm } = useDialogs();
     const [tree, setTree] = useState<FileNode[]>([]);
     const [tabs, setTabs] = useState<OpenTab[]>([]);
@@ -105,6 +107,20 @@ export function EditorView({ target, targetKey, notify }: Props) {
 
     const current = tabs.find((t) => t.path === active) ?? null;
     const dirty = current ? current.content !== current.saved : false;
+    const dirtyCount = tabs.filter((t) => !t.binary && t.content !== t.saved).length;
+
+    // Surface the dirty count to the app (template-switch guard) and warn on close.
+    useEffect(() => {
+        onDirtyChange?.(dirtyCount);
+        return () => onDirtyChange?.(0);
+    }, [dirtyCount, onDirtyChange]);
+
+    useEffect(() => {
+        if (!dirtyCount) return;
+        const h = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+        window.addEventListener('beforeunload', h);
+        return () => window.removeEventListener('beforeunload', h);
+    }, [dirtyCount > 0]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const save = useCallback(async () => {
         if (!current || !dirty) return;
