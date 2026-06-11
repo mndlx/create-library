@@ -59,13 +59,14 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
     );
 }
 
+// Uses two dynamic tokens: @@COMPONENT@@ (name) and @@TITLE@@ (default title).
 const TODO_TSX = `import { useState } from 'react';
 
-export interface TodoProps {
+export interface @@COMPONENT@@Props {
   title?: string;
 }
 
-export function Todo({ title = 'To-Do' }: TodoProps) {
+export function @@COMPONENT@@({ title = '@@TITLE@@' }: @@COMPONENT@@Props) {
   const [items, setItems] = useState<string[]>([]);
   const [text, setText] = useState('');
 
@@ -89,9 +90,10 @@ export function Todo({ title = 'To-Do' }: TodoProps) {
   );
 }`;
 
-const TODO_INDEX = `export * from './Todo';`;
+const TODO_INDEX = `export * from './@@COMPONENT@@';`;
 
-const IMPORT_USAGE = `import { Todo } from './components/Todo';
+const IMPORT_USAGE = `// After generating with COMPONENT = "Todo", TITLE = "My tasks":
+import { Todo } from './components/Todo';
 
 export function App() {
   return <Todo title="My tasks" />;
@@ -112,12 +114,13 @@ export function GuideDialog({ open, onClose, onNewTemplate }: Props) {
                     A <b>template</b> is a folder of files you can reuse. The engine copies those files into a new
                     project (<Chip size="small" label="new" color="secondary" variant="outlined" sx={{ height: 18 }} />)
                     or merges them into an existing one (<Chip size="small" label="merge" color="warning" variant="outlined" sx={{ height: 18 }} />),
-                    replacing <code>__TOKEN__</code> placeholders with answers you give at generation time. Files live
-                    under the template's <code>template/</code> folder; optional parts live as <b>features</b>.
+                    replacing <b>dynamic tokens</b> like <code>@@name@@</code> with answers you give at generation time.
+                    The delimiters (<code>@@</code>…<code>@@</code> by default) are configurable per template in
+                    {' '}<b>Author → Token configuration</b>.
                 </Typography>
 
                 <Divider sx={{ my: 2 }} />
-                <Typography variant="h6" sx={{ mb: 1.5 }}>Walkthrough — a Todo component you can import</Typography>
+                <Typography variant="h6" sx={{ mb: 1.5 }}>Walkthrough — a Todo component with dynamic variables</Typography>
 
                 <Step n={1} title="Create the template">
                     <Typography variant="body2">
@@ -129,33 +132,37 @@ export function GuideDialog({ open, onClose, onNewTemplate }: Props) {
                     </Button>
                 </Step>
 
-                <Step n={2} title="Add the component files">
+                <Step n={2} title="Add files using dynamic tokens">
                     <Typography variant="body2">
-                        Go to the <b>Editor</b> tab. In the Explorer use <b>New file</b> to create
-                        {' '}<code>template/src/components/Todo/Todo.tsx</code> and paste:
+                        Go to the <b>Editor</b> tab. Create
+                        {' '}<code>template/src/components/@@COMPONENT@@/@@COMPONENT@@.tsx</code> — note the token is in the
+                        {' '}<b>path</b> too — and paste:
                     </Typography>
-                    <Code lang="Todo.tsx">{TODO_TSX}</Code>
-                    <Typography variant="body2">Then create <code>template/src/components/Todo/index.ts</code>:</Typography>
+                    <Code lang="@@COMPONENT@@.tsx">{TODO_TSX}</Code>
+                    <Typography variant="body2">Then <code>template/src/components/@@COMPONENT@@/index.ts</code>:</Typography>
                     <Code lang="index.ts">{TODO_INDEX}</Code>
                     <Typography variant="caption" color="text.secondary">
-                        Press Ctrl+S to save each file. Tip: put <code>__NAME__</code> anywhere in a file and it becomes a
-                        variable you can fill in at generation time.
+                        Save with Ctrl+S. Anything matching <code>@@…@@</code> in a file's contents <b>or</b> its name
+                        becomes a variable automatically.
                     </Typography>
                 </Step>
 
-                <Step n={3} title="(Optional) make the default title a variable">
+                <Step n={3} title="Tune the variables in the inspector">
                     <Typography variant="body2">
-                        In <b>Author</b> → <i>Add a variable</i>: name <code>todoTitle</code>, token <code>TODOTITLE</code>,
-                        default <code>To-Do</code>. Then in <code>Todo.tsx</code> replace the default with
-                        {' '}<code>__TODOTITLE__</code> — generation substitutes your answer.
+                        Open <b>Author</b>. The inspector auto-lists <code>@@COMPONENT@@</code> and <code>@@TITLE@@</code>
+                        {' '}(hit <b>Sync from files</b> if you edited manually). Set a question and default for each —
+                        e.g. <code>TITLE</code> default <code>To-Do</code> — and toggle <b>CLI</b> to choose whether the
+                        command-line generator asks for it. Click <b>Save</b> on each.
                     </Typography>
                 </Step>
 
                 <Step n={4} title="Generate / merge into your app">
                     <Typography variant="body2">
-                        Open the <b>Generate</b> tab, set <b>Mode</b> = <b>merge</b>, and <b>Target directory</b> to your
-                        existing React project (e.g. <code>C:\\dev\\my-app</code>). Click <b>Generate</b>. The component
-                        files are written under your app's <code>src/components/Todo/</code>.
+                        Open <b>Generate</b>. Fill the variables — <code>COMPONENT = Todo</code>,
+                        {' '}<code>TITLE = My tasks</code> — set <b>Mode</b> = <b>merge</b> and <b>Target directory</b> to
+                        your React project. Click <b>Generate</b>: every <code>@@COMPONENT@@</code> becomes <code>Todo</code>
+                        {' '}(in the file names and code) and <code>@@TITLE@@</code> becomes <code>My tasks</code>, written
+                        under <code>src/components/Todo/</code>.
                     </Typography>
                 </Step>
 
@@ -170,7 +177,7 @@ export function GuideDialog({ open, onClose, onNewTemplate }: Props) {
                     <ul style={{ margin: 0, paddingLeft: 18 }}>
                         <li><b>New template</b> — top bar / drawer “+”.</li>
                         <li><b>Editor</b> — create & edit the template's files (VSCode-style).</li>
-                        <li><b>Author</b> — add variables (<code>__TOKEN__</code>) and components.</li>
+                        <li><b>Author</b> — token delimiters + the auto-detected variable inspector (question, default, CLI exposure).</li>
                         <li><b>Generate</b> — produce a new project, or merge into an existing one.</li>
                         <li><b>Open folder…</b> — edit any directory directly, no manifest needed.</li>
                         <li><b>Payload layout</b> — a template can keep files in a <code>template/</code> subfolder, or flat at its root. For flat templates the <code>template.json</code> is left out of the output unless you tick “Include manifest files” in Generate.</li>
