@@ -2,17 +2,20 @@
 import { exec } from 'child_process';
 import * as fs from 'fs';
 import * as http from 'http';
+import * as os from 'os';
 import * as path from 'path';
 import {
     LoadedTemplate,
     PromptDef,
     addTemplateDir,
+    assemble,
     detectForeignTokens,
     exportTemplate,
     findTemplate,
     generate,
     importTemplate,
     listPublishedVersions,
+    loadManifest,
     listTemplates,
     mergeInto,
     nameVarOf,
@@ -26,6 +29,7 @@ import {
     tokenConfigOf,
     validateManifest,
     writeRawManifest,
+    zipDirectory,
 } from '../engine';
 
 const PORT = Number(process.env.PORT) || 4517;
@@ -273,6 +277,37 @@ async function handleApi(
 
     if (req.method === 'GET' && pathname === '/api/published') {
         return sendJson(res, 200, { ok: true, versions: listPublishedVersions(query.template || undefined) });
+    }
+
+    // The latest published snapshot of a template, serialized like /api/state entries.
+    if (req.method === 'GET' && pathname === '/api/published-template') {
+        const pub = listPublishedVersions(query.template || '')[0];
+        if (!pub) return sendJson(res, 200, { ok: true, published: null });
+        return sendJson(res, 200, { ok: true, published: serialize(loadManifest(pub.dir)) });
+    }
+
+    // Export: generate from the latest PUBLISHED snapshot with the given values
+    // and stream the result as a zip (same engine path the CLI generation uses).
+    if (req.method === 'POST' && pathname === '/api/export-zip') {
+        const name = String(body.templateName || '');
+        const pub = listPublishedVersions(name)[0];
+        if (!pub) throw new Error(`No published version of "${name}". Publish one first.`);
+        const t = loadManifest(pub.dir);
+        const stagingRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'vlcl-zip-'));
+        const tree = path.join(stagingRoot, 'tree');
+        try {
+            assemble(t, tree, body.answers || {}, body.features || {}, !!body.includeManifest);
+            const zip = zipDirectory(tree);
+            res.writeHead(200, {
+                'Content-Type': 'application/zip',
+                'Content-Disposition': `attachment; filename="${pub.name}-${pub.version}.zip"`,
+                'Cache-Control': 'no-store',
+            });
+            res.end(zip);
+        } finally {
+            fs.rmSync(stagingRoot, { recursive: true, force: true });
+        }
+        return;
     }
 
     if (req.method === 'POST' && pathname === '/api/set-token-config') {

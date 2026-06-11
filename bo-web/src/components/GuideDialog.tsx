@@ -177,9 +177,10 @@ export function GuideDialog({ open, onClose, onNewTemplate }: Props) {
                     <ul style={{ margin: 0, paddingLeft: 18 }}>
                         <li><b>New template</b> — top bar / drawer “+”.</li>
                         <li><b>Editor</b> — create & edit the template's files (VSCode-style).</li>
-                        <li><b>Right panel</b> — template settings, variables (auto-detected, auto-saved), export, publish.</li>
-                        <li><b>Export</b> — produce output with every placeholder replaced by your values (new project or merge).</li>
-                        <li><b>Publish</b> — versioned snapshot (placeholders intact) to the local registry for the CLI.</li>
+                        <li><b>Right panel</b> — template settings, variables (auto-detected, auto-saved), generate to folder, publish.</li>
+                        <li><b>Publish</b> — versioned snapshot (placeholders intact) to the local registry; used by the CLI and by Export.</li>
+                        <li><b>Export</b> (top bar) — fill the variables of the <i>published</i> version and download the result as a zip, placeholders replaced.</li>
+                        <li><b>Generate to folder</b> (right panel) — same replacement, written to a directory or merged into an existing project.</li>
                         <li><b>Open folder…</b> — edit any directory directly, no manifest needed.</li>
                         <li><b>Payload layout</b> — a template can keep files in a <code>template/</code> subfolder, or flat at its root. For flat templates the <code>template.json</code> is left out of the output unless you tick “Include manifest files” in Export.</li>
                     </ul>

@@ -123,6 +123,18 @@ export const api = {
     exportTemplate: (p: { templateName: string; bump?: 'patch' | 'minor' | 'major'; overwrite?: boolean }) =>
         req<{ name: string; version: string; dir: string }>('/api/export', p),
     published: (template: string) => req<{ versions: PublishedVersion[] }>('/api/published?' + qs({ template })),
+    publishedTemplate: (template: string) =>
+        req<{ published: Template | null }>('/api/published-template?' + qs({ template })),
+    exportZip: async (p: { templateName: string; answers: Record<string, string>; features: Record<string, boolean | string> }): Promise<{ blob: Blob; filename: string }> => {
+        const r = await fetch('/api/export-zip', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p) });
+        if (!r.ok) {
+            const data = await r.json().catch(() => ({}));
+            throw new Error((data as { error?: string }).error || `HTTP ${r.status}`);
+        }
+        const cd = r.headers.get('Content-Disposition') || '';
+        const filename = /filename="([^"]+)"/.exec(cd)?.[1] || `${p.templateName}.zip`;
+        return { blob: await r.blob(), filename };
+    },
     addComponent: (p: { templateName: string; component: string; default: boolean }) =>
         req<{ ok: true }>('/api/add-component', p),
     setOutput: (p: { templateName: string; output: OutputMode }) => req<{ ok: true }>('/api/set-output', p),

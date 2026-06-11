@@ -37,15 +37,21 @@ move, selection-aware create, rename/delete with confirmation. `Ctrl+S` saves.
 Everything about the selected template lives in the resizable **right panel**:
 
 - **Template settings** — title, description, version, output mode, validate.
-- **Variables** — token delimiters + the auto-detected inspector. Edits
-  **auto-save**; **Sync** re-scans after manual edits; per-token CLI switch.
-- **Export** — fill the variable values and produce output where every
-  placeholder is replaced (new folder or merge into an existing project);
-  presets; optional manifest inclusion.
+- **Variables** — the auto-detected inspector. Edits **auto-save**; **Sync**
+  re-scans after manual edits; per-token CLI switch. Token delimiters are
+  read from `tokenConfig` in `template.json` (edit them there); a warning
+  appears when files use a different delimiter style.
+- **Generate to folder** — fill the variable values and write output where
+  every placeholder is replaced (new folder or merge into an existing
+  project); presets; optional manifest inclusion.
 - **Publish to registry** — version bump (patch/minor/major) and a snapshot
   (placeholders intact) into `~/.virtuallab-create-library/published`; the CLI
   uses the latest published version of each template.
 - **Components & dirs** — component scaffolding; register external dirs.
+
+**Export** (top bar) generates from the latest **published** version: a dialog
+asks for the variable values, then the result — placeholders replaced, same
+engine output the CLI produces — downloads as `<name>-<version>.zip`.
 
 Unsaved editor changes are guarded: switching template or closing the page asks
 for confirmation.

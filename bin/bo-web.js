@@ -37,6 +37,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const child_process_1 = require("child_process");
 const fs = __importStar(require("fs"));
 const http = __importStar(require("http"));
+const os = __importStar(require("os"));
 const path = __importStar(require("path"));
 const engine_1 = require("../engine");
 const PORT = Number(process.env.PORT) || 4517;
@@ -264,6 +265,38 @@ async function handleApi(req, res, pathname, query) {
     }
     if (req.method === 'GET' && pathname === '/api/published') {
         return sendJson(res, 200, { ok: true, versions: (0, engine_1.listPublishedVersions)(query.template || undefined) });
+    }
+    // The latest published snapshot of a template, serialized like /api/state entries.
+    if (req.method === 'GET' && pathname === '/api/published-template') {
+        const pub = (0, engine_1.listPublishedVersions)(query.template || '')[0];
+        if (!pub)
+            return sendJson(res, 200, { ok: true, published: null });
+        return sendJson(res, 200, { ok: true, published: serialize((0, engine_1.loadManifest)(pub.dir)) });
+    }
+    // Export: generate from the latest PUBLISHED snapshot with the given values
+    // and stream the result as a zip (same engine path the CLI generation uses).
+    if (req.method === 'POST' && pathname === '/api/export-zip') {
+        const name = String(body.templateName || '');
+        const pub = (0, engine_1.listPublishedVersions)(name)[0];
+        if (!pub)
+            throw new Error(`No published version of "${name}". Publish one first.`);
+        const t = (0, engine_1.loadManifest)(pub.dir);
+        const stagingRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'vlcl-zip-'));
+        const tree = path.join(stagingRoot, 'tree');
+        try {
+            (0, engine_1.assemble)(t, tree, body.answers || {}, body.features || {}, !!body.includeManifest);
+            const zip = (0, engine_1.zipDirectory)(tree);
+            res.writeHead(200, {
+                'Content-Type': 'application/zip',
+                'Content-Disposition': `attachment; filename="${pub.name}-${pub.version}.zip"`,
+                'Cache-Control': 'no-store',
+            });
+            res.end(zip);
+        }
+        finally {
+            fs.rmSync(stagingRoot, { recursive: true, force: true });
+        }
+        return;
     }
     if (req.method === 'POST' && pathname === '/api/set-token-config') {
         const t = requireTemplate(body.templateName);

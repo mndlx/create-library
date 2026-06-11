@@ -1,6 +1,7 @@
 import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
 import CodeIcon from '@mui/icons-material/Code';
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -28,6 +29,7 @@ import { api, type AppState, type FileTarget, type Template } from './api';
 import { CreateTemplateDialog } from './components/CreateTemplateDialog';
 import { useDialogs } from './components/dialogs';
 import { EditorView } from './components/EditorView';
+import { ExportDialog } from './components/ExportDialog';
 import { GuideDialog } from './components/GuideDialog';
 import { RightPanel } from './components/RightPanel';
 
@@ -42,6 +44,7 @@ export function App() {
     const [snack, setSnack] = useState<{ msg: string; sev: Severity } | null>(null);
     const [result, setResult] = useState<unknown>(null);
     const [createOpen, setCreateOpen] = useState(false);
+    const [exportOpen, setExportOpen] = useState(false);
     const [guideOpen, setGuideOpen] = useState(false);
     const dirtyRef = useRef(0);
 
@@ -167,6 +170,11 @@ export function App() {
                     <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>create-library</Typography>
                     <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>· back-office</Typography>
                     <Box sx={{ flex: 1 }} />
+                    {template && !workspace && (
+                        <Button size="small" startIcon={<FileDownloadIcon />} variant="contained" onClick={() => setExportOpen(true)} sx={{ mr: 1 }}>
+                            Export
+                        </Button>
+                    )}
                     <Button size="small" startIcon={<AddIcon />} variant="outlined" onClick={() => setCreateOpen(true)} sx={{ mr: 1 }}>
                         New template
                     </Button>
@@ -285,6 +293,8 @@ export function App() {
                 notify={notify}
                 onCreated={onCreated}
             />
+
+            <ExportDialog open={exportOpen} templateName={template?.name ?? null} onClose={() => setExportOpen(false)} notify={notify} />
 
             <GuideDialog open={guideOpen} onClose={() => setGuideOpen(false)} onNewTemplate={() => setCreateOpen(true)} />
 

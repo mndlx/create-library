@@ -121,18 +121,8 @@ function VariableRow({ template, v, notify, reload }: { template: Template; v: V
 }
 
 export function VariablesPanel({ template, notify, reload }: Props) {
-    const [start, setStart] = useState(template.tokenConfig.start);
-    const [end, setEnd] = useState(template.tokenConfig.end);
+    const { start, end } = template.tokenConfig;
     const [newToken, setNewToken] = useState('');
-
-    useEffect(() => { setStart(template.tokenConfig.start); setEnd(template.tokenConfig.end); }, [template.tokenConfig]);
-
-    const saveConfig = async () => {
-        try { await api.setTokenConfig({ templateName: template.name, start, end }); notify('Token delimiters saved', 'success'); reload(); }
-        catch (e) { notify((e as Error).message, 'error'); }
-    };
-
-    const delimitersDirty = start !== template.tokenConfig.start || end !== template.tokenConfig.end;
 
     const switchDelimiters = async (s: string, e: string) => {
         try { await api.setTokenConfig({ templateName: template.name, start: s, end: e }); notify(`Delimiters switched to ${s}…${e}`, 'success'); reload(); }
@@ -163,11 +153,8 @@ export function VariablesPanel({ template, notify, reload }: Props) {
             </Typography>
 
             <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1.5 }}>
-                <TextField size="small" label="Start" value={start} onChange={(e) => setStart(e.target.value)} sx={{ width: 90 }} />
-                <TextField size="small" label="End" value={end} onChange={(e) => setEnd(e.target.value)} sx={{ width: 90 }} />
-                <Button size="small" variant={delimitersDirty ? 'contained' : 'outlined'} onClick={saveConfig} disabled={!delimitersDirty}>
-                    Apply
-                </Button>
+                <Chip size="small" variant="outlined" label={`delimiters: ${start}…${end}`} sx={{ fontFamily: 'ui-monospace, monospace' }} />
+                <Typography variant="caption" color="text.secondary">from <code>tokenConfig</code> in template.json</Typography>
                 <Box sx={{ flex: 1 }} />
                 <Tooltip title="Re-scan the template files for tokens (after manual edits)">
                     <Button size="small" startIcon={<SyncIcon />} onClick={reload}>Sync</Button>

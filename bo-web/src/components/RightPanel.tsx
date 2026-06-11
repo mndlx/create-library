@@ -187,7 +187,8 @@ function GenerateSection({ template, state, notify, onResult }: SectionProps & {
         <Stack spacing={1.5}>
             <Typography variant="caption" color="text.secondary">
                 Replaces every {template.tokenConfig.start}token{template.tokenConfig.end} (in file contents and names)
-                with the values below and writes the result to the target directory.
+                with the values below and writes the result to the target directory. For a downloadable zip of the
+                published version, use <b>Export</b> in the top bar.
             </Typography>
             {template.variables.length > 0 && <Typography variant="caption" color="text.secondary">Variable values</Typography>}
             {template.variables.map((v) => (
@@ -232,7 +233,7 @@ function GenerateSection({ template, state, notify, onResult }: SectionProps & {
             <FormControlLabel control={<Checkbox size="small" checked={includeManifest} onChange={(e) => setIncludeManifest(e.target.checked)} />}
                 label={<Typography variant="body2">Include manifest files in output</Typography>} />
             <Stack direction="row" spacing={1}>
-                <Button variant="contained" startIcon={<RocketLaunchIcon />} onClick={generate}>Export</Button>
+                <Button variant="contained" startIcon={<RocketLaunchIcon />} onClick={generate}>Generate</Button>
                 <Button variant="outlined" onClick={savePreset}>Save preset…</Button>
             </Stack>
         </Stack>
@@ -319,7 +320,7 @@ export function RightPanel({ template, state, notify, reload, onResult }: PanelP
                     <VariablesPanel template={template} notify={notify} reload={reload} />
                 </Section>
                 <Divider />
-                <Section title="Export" defaultExpanded>
+                <Section title="Generate to folder" defaultExpanded>
                     <GenerateSection template={template} state={state} notify={notify} reload={reload} onResult={onResult} />
                 </Section>
                 <Divider />
