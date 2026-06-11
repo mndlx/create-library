@@ -1,17 +1,16 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.runFeatureSelection = exports.runTemplatePrompts = exports.CLI_COLORS = void 0;
-const mandolin_1 = require("@virtual-registry/mandolin");
+exports.runFeatureSelection = exports.runTemplatePrompts = void 0;
+const prompts_1 = require("@clack/prompts");
+const picocolors_1 = __importDefault(require("picocolors"));
 const tokens_1 = require("./tokens");
 const validators_1 = require("./validators");
-const { text, divider } = mandolin_1.Components;
-/** Palette shared by the CLI prompts (256-color codes). */
-exports.CLI_COLORS = {
-    accent: 51, // cyan
-    ok: 82, // green
-    warn: 214, // orange
-    muted: 245, // grey
-    token: 213, // pink
+const bail = () => {
+    (0, prompts_1.cancel)('Cancelled.');
+    process.exit(1);
 };
 const applyValidator = (v, value) => {
     const fallback = v.default ?? '';
@@ -21,74 +20,68 @@ const applyValidator = (v, value) => {
         return value || fallback;
     return value || fallback;
 };
-/** Drive the template's variables through a mandolin wizard and return the answers. */
+/** Ask for every CLI-exposed variable and return the full answer map. */
 const runTemplatePrompts = async (template) => {
     const variables = (0, tokens_1.resolveVariables)(template);
     const asked = variables.filter((x) => x.exposeCli);
     const cfg = (0, tokens_1.tokenConfigOf)(template);
-    const initial = {};
+    const answers = {};
     for (const v of variables)
-        initial[v.name] = v.default;
+        answers[v.name] = v.default;
     if (!asked.length)
-        return initial;
-    const wizard = new mandolin_1.Terminal();
-    wizard.initState(initial);
-    wizard.newLine(divider());
-    wizard.newLine(text(' VARIABLES ', { bgcolor: exports.CLI_COLORS.accent, color: 16, effect: ['bold'] }) +
-        text(`  ${asked.length} value(s) — each replaces its token in the generated files`, { color: exports.CLI_COLORS.muted }));
+        return answers;
+    prompts_1.log.step(picocolors_1.default.bold('Variables') + picocolors_1.default.dim(` — ${asked.length} value(s), each replaces its token in the generated files`));
     for (const v of asked) {
-        const tokenBadge = text(`${cfg.start}${v.token}${cfg.end}`, { color: exports.CLI_COLORS.token, effect: ['bold'] });
-        const hint = v.default
-            ? text(`  (Enter = ${v.default})`, { color: exports.CLI_COLORS.muted })
-            : text('  (required)', { color: exports.CLI_COLORS.warn });
-        wizard.newLine('');
-        wizard.newLine(`${tokenBadge}  ${text(v.message, { effect: ['bold'] })}${hint}`);
+        const token = picocolors_1.default.magenta(`${cfg.start}${v.token}${cfg.end}`);
+        const message = `${token}  ${v.message}`;
         if (v.type === 'select' && v.options && v.options.length) {
-            const options = v.options;
-            wizard.newSelectLine(options, (sel, state) => ({ ...state, [v.name]: String(sel) }));
+            const value = await (0, prompts_1.select)({
+                message,
+                options: v.options.map((o) => ({ value: o, label: o })),
+                initialValue: v.default && v.options.includes(v.default) ? v.default : v.options[0],
+            });
+            if ((0, prompts_1.isCancel)(value))
+                bail();
+            answers[v.name] = String(value);
         }
         else {
-            wizard.newInputLine((input, state) => ({ ...state, [v.name]: applyValidator(v, input) }));
+            const value = await (0, prompts_1.text)({
+                message,
+                placeholder: v.default ? `Enter = ${v.default}` : 'required',
+                defaultValue: v.default,
+            });
+            if ((0, prompts_1.isCancel)(value))
+                bail();
+            answers[v.name] = applyValidator(v, String(value ?? ''));
         }
     }
-    await wizard.draw({ clean: true });
-    return wizard.state ?? initial;
+    return answers;
 };
 exports.runTemplatePrompts = runTemplatePrompts;
-const YES = 'yes';
-const NO = 'no';
-/** Drive the manifest's features through a wizard and return a selection map. */
+/** Ask for every feature and return a selection map. */
 const runFeatureSelection = async (template) => {
     const features = template.manifest.features ?? [];
     if (!features.length)
         return {};
-    const wizard = new mandolin_1.Terminal();
-    const initial = {};
-    for (const f of features) {
-        initial[f.id] = f.type === 'boolean'
-            ? (f.default ? YES : NO)
-            : (f.default ?? f.options?.[0] ?? '');
-    }
-    wizard.initState(initial);
-    wizard.newLine(divider());
-    wizard.newLine(text(' FEATURES ', { bgcolor: exports.CLI_COLORS.ok, color: 16, effect: ['bold'] }) +
-        text('  optional parts of the output', { color: exports.CLI_COLORS.muted }));
-    for (const f of features) {
-        wizard.newLine('');
-        wizard.newLine(text('◆ ', { color: exports.CLI_COLORS.ok }) + text(f.label, { effect: ['bold'] }));
-        if (f.type === 'select' && f.options && f.options.length) {
-            const options = f.options;
-            wizard.newSelectLine(options, (sel, state) => ({ ...state, [f.id]: String(sel) }));
-        }
-        else {
-            wizard.newSelectLine([YES, NO], (sel, state) => ({ ...state, [f.id]: String(sel) }));
-        }
-    }
-    await wizard.draw({ clean: true });
-    const state = wizard.state ?? initial;
+    prompts_1.log.step(picocolors_1.default.bold('Features') + picocolors_1.default.dim(' — optional parts of the output'));
     const selection = {};
     for (const f of features) {
-        selection[f.id] = f.type === 'boolean' ? state[f.id] === YES : state[f.id];
+        if (f.type === 'select' && f.options && f.options.length) {
+            const value = await (0, prompts_1.select)({
+                message: f.label,
+                options: f.options.map((o) => ({ value: o, label: o })),
+                initialValue: typeof f.default === 'string' && f.options.includes(f.default) ? f.default : f.options[0],
+            });
+            if ((0, prompts_1.isCancel)(value))
+                bail();
+            selection[f.id] = String(value);
+        }
+        else {
+            const value = await (0, prompts_1.confirm)({ message: f.label, initialValue: !!f.default });
+            if ((0, prompts_1.isCancel)(value))
+                bail();
+            selection[f.id] = !!value;
+        }
     }
     return selection;
 };

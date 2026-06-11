@@ -1,20 +1,15 @@
-import { Components, Terminal } from '@virtual-registry/mandolin';
+import { cancel, confirm, isCancel, log, select, text } from '@clack/prompts';
+import pc from 'picocolors';
 import { ResolvedVariable, resolveVariables, tokenConfigOf } from './tokens';
 import { LoadedTemplate } from './types';
 import { normalizePackageName } from './validators';
 
-const { text, divider } = Components;
-
 type State = Record<string, string>;
 
-/** Palette shared by the CLI prompts (256-color codes). */
-export const CLI_COLORS = {
-    accent: 51,   // cyan
-    ok: 82,       // green
-    warn: 214,    // orange
-    muted: 245,   // grey
-    token: 213,   // pink
-} as const;
+const bail = (): never => {
+    cancel('Cancelled.');
+    process.exit(1);
+};
 
 const applyValidator = (v: ResolvedVariable, value: string): string => {
     const fallback = v.default ?? '';
@@ -23,87 +18,67 @@ const applyValidator = (v: ResolvedVariable, value: string): string => {
     return value || fallback;
 };
 
-/** Drive the template's variables through a mandolin wizard and return the answers. */
+/** Ask for every CLI-exposed variable and return the full answer map. */
 export const runTemplatePrompts = async (template: LoadedTemplate): Promise<State> => {
     const variables = resolveVariables(template);
     const asked = variables.filter((x) => x.exposeCli);
     const cfg = tokenConfigOf(template);
 
-    const initial: State = {};
-    for (const v of variables) initial[v.name] = v.default;
-    if (!asked.length) return initial;
+    const answers: State = {};
+    for (const v of variables) answers[v.name] = v.default;
+    if (!asked.length) return answers;
 
-    const wizard = new Terminal<State>();
-    wizard.initState(initial);
-
-    wizard.newLine(divider());
-    wizard.newLine(
-        text(' VARIABLES ', { bgcolor: CLI_COLORS.accent, color: 16, effect: ['bold'] }) +
-        text(`  ${asked.length} value(s) — each replaces its token in the generated files`, { color: CLI_COLORS.muted })
-    );
+    log.step(pc.bold('Variables') + pc.dim(` — ${asked.length} value(s), each replaces its token in the generated files`));
 
     for (const v of asked) {
-        const tokenBadge = text(`${cfg.start}${v.token}${cfg.end}`, { color: CLI_COLORS.token, effect: ['bold'] });
-        const hint = v.default
-            ? text(`  (Enter = ${v.default})`, { color: CLI_COLORS.muted })
-            : text('  (required)', { color: CLI_COLORS.warn });
-        wizard.newLine('');
-        wizard.newLine(`${tokenBadge}  ${text(v.message, { effect: ['bold'] })}${hint}`);
+        const token = pc.magenta(`${cfg.start}${v.token}${cfg.end}`);
+        const message = `${token}  ${v.message}`;
 
         if (v.type === 'select' && v.options && v.options.length) {
-            const options = v.options;
-            wizard.newSelectLine(options, (sel, state) => ({ ...state, [v.name]: String(sel) }));
+            const value = await select({
+                message,
+                options: v.options.map((o) => ({ value: o, label: o })),
+                initialValue: v.default && v.options.includes(v.default) ? v.default : v.options[0],
+            });
+            if (isCancel(value)) bail();
+            answers[v.name] = String(value);
         } else {
-            wizard.newInputLine((input, state) => ({ ...state, [v.name]: applyValidator(v, input) }));
+            const value = await text({
+                message,
+                placeholder: v.default ? `Enter = ${v.default}` : 'required',
+                defaultValue: v.default,
+            });
+            if (isCancel(value)) bail();
+            answers[v.name] = applyValidator(v, String(value ?? ''));
         }
     }
-
-    await wizard.draw({ clean: true });
-    return wizard.state ?? initial;
+    return answers;
 };
 
-const YES = 'yes';
-const NO = 'no';
-
-/** Drive the manifest's features through a wizard and return a selection map. */
+/** Ask for every feature and return a selection map. */
 export const runFeatureSelection = async (
     template: LoadedTemplate
 ): Promise<Record<string, boolean | string>> => {
     const features = template.manifest.features ?? [];
     if (!features.length) return {};
 
-    const wizard = new Terminal<Record<string, string>>();
-    const initial: Record<string, string> = {};
-    for (const f of features) {
-        initial[f.id] = f.type === 'boolean'
-            ? (f.default ? YES : NO)
-            : ((f.default as string) ?? f.options?.[0] ?? '');
-    }
-    wizard.initState(initial);
-
-    wizard.newLine(divider());
-    wizard.newLine(
-        text(' FEATURES ', { bgcolor: CLI_COLORS.ok, color: 16, effect: ['bold'] }) +
-        text('  optional parts of the output', { color: CLI_COLORS.muted })
-    );
-
-    for (const f of features) {
-        wizard.newLine('');
-        wizard.newLine(text('◆ ', { color: CLI_COLORS.ok }) + text(f.label, { effect: ['bold'] }));
-        if (f.type === 'select' && f.options && f.options.length) {
-            const options = f.options;
-            wizard.newSelectLine(options, (sel, state) => ({ ...state, [f.id]: String(sel) }));
-        } else {
-            wizard.newSelectLine([YES, NO], (sel, state) => ({ ...state, [f.id]: String(sel) }));
-        }
-    }
-
-    await wizard.draw({ clean: true });
-    const state = wizard.state ?? initial;
+    log.step(pc.bold('Features') + pc.dim(' — optional parts of the output'));
 
     const selection: Record<string, boolean | string> = {};
     for (const f of features) {
-        selection[f.id] = f.type === 'boolean' ? state[f.id] === YES : state[f.id];
+        if (f.type === 'select' && f.options && f.options.length) {
+            const value = await select({
+                message: f.label,
+                options: f.options.map((o) => ({ value: o, label: o })),
+                initialValue: typeof f.default === 'string' && f.options.includes(f.default) ? f.default : f.options[0],
+            });
+            if (isCancel(value)) bail();
+            selection[f.id] = String(value);
+        } else {
+            const value = await confirm({ message: f.label, initialValue: !!f.default });
+            if (isCancel(value)) bail();
+            selection[f.id] = !!value;
+        }
     }
     return selection;
 };

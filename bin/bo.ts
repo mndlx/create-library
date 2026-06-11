@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import * as fs from 'fs';
 import * as path from 'path';
-import { Components, Terminal } from '@virtual-registry/mandolin';
+import * as clack from '@clack/prompts';
+import pc from 'picocolors';
 import {
     LoadedTemplate,
     PromptDef,
@@ -24,24 +25,33 @@ import {
     writeRawManifest,
 } from '../engine';
 
-const { text } = Components;
+/** Colored text helper kept API-compatible with the old mandolin usage. */
+const text = (s: string, opt?: { color?: number }): string => {
+    if (opt?.color === 82) return pc.green(s);
+    if (opt?.color === 51) return pc.cyan(s);
+    if (opt?.color === 197) return pc.red(s);
+    return s;
+};
+
+const bail = (): never => {
+    clack.cancel('Cancelled.');
+    process.exit(1);
+};
 
 async function select(question: string, options: string[]): Promise<string> {
-    const w = new Terminal<{ value: string }>();
-    w.initState({ value: options[0] });
-    w.newLine(question);
-    w.newSelectLine(options, (sel) => ({ value: String(sel) }));
-    await w.draw({});
-    return w.state?.value ?? options[0];
+    const value = await clack.select({ message: question, options: options.map((o) => ({ value: o, label: o })) });
+    if (clack.isCancel(value)) bail();
+    return String(value);
 }
 
 async function input(question: string, fallback = ''): Promise<string> {
-    const w = new Terminal<{ value: string }>();
-    w.initState({ value: fallback });
-    w.newLine(fallback ? `${question} (default: ${fallback})` : question);
-    w.newInputLine((raw) => ({ value: raw || fallback }));
-    await w.draw({});
-    return w.state?.value ?? fallback;
+    const value = await clack.text({
+        message: question,
+        placeholder: fallback ? `Enter = ${fallback}` : undefined,
+        defaultValue: fallback,
+    });
+    if (clack.isCancel(value)) bail();
+    return String(value ?? '') || fallback;
 }
 
 async function chooseTemplate(verb: string): Promise<LoadedTemplate | undefined> {

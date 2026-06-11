@@ -33,27 +33,44 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
-const mandolin_1 = require("@virtual-registry/mandolin");
+const clack = __importStar(require("@clack/prompts"));
+const picocolors_1 = __importDefault(require("picocolors"));
 const engine_1 = require("../engine");
-const { text } = mandolin_1.Components;
+/** Colored text helper kept API-compatible with the old mandolin usage. */
+const text = (s, opt) => {
+    if (opt?.color === 82)
+        return picocolors_1.default.green(s);
+    if (opt?.color === 51)
+        return picocolors_1.default.cyan(s);
+    if (opt?.color === 197)
+        return picocolors_1.default.red(s);
+    return s;
+};
+const bail = () => {
+    clack.cancel('Cancelled.');
+    process.exit(1);
+};
 async function select(question, options) {
-    const w = new mandolin_1.Terminal();
-    w.initState({ value: options[0] });
-    w.newLine(question);
-    w.newSelectLine(options, (sel) => ({ value: String(sel) }));
-    await w.draw({});
-    return w.state?.value ?? options[0];
+    const value = await clack.select({ message: question, options: options.map((o) => ({ value: o, label: o })) });
+    if (clack.isCancel(value))
+        bail();
+    return String(value);
 }
 async function input(question, fallback = '') {
-    const w = new mandolin_1.Terminal();
-    w.initState({ value: fallback });
-    w.newLine(fallback ? `${question} (default: ${fallback})` : question);
-    w.newInputLine((raw) => ({ value: raw || fallback }));
-    await w.draw({});
-    return w.state?.value ?? fallback;
+    const value = await clack.text({
+        message: question,
+        placeholder: fallback ? `Enter = ${fallback}` : undefined,
+        defaultValue: fallback,
+    });
+    if (clack.isCancel(value))
+        bail();
+    return String(value ?? '') || fallback;
 }
 async function chooseTemplate(verb) {
     const templates = (0, engine_1.listTemplates)();

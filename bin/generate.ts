@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 import * as fs from 'fs';
 import * as path from 'path';
-import { Components, Terminal } from '@virtual-registry/mandolin';
+import { intro, isCancel, cancel, log, note, outro, select, spinner } from '@clack/prompts';
+import pc from 'picocolors';
 import {
-    CLI_COLORS,
     GenerationConfig,
     LoadedTemplate,
     defaultSelection,
@@ -23,9 +23,6 @@ import {
     tokensFromAnswers,
     withDefaults,
 } from '../engine';
-
-const { Spinner, text, divider, br } = Components;
-const C = CLI_COLORS;
 
 interface Args {
     template?: string;
@@ -53,64 +50,48 @@ const parseArgs = (argv: string[]): Args => {
     return args;
 };
 
-const banner = () => {
-    console.log(br());
-    console.log(
-        text(' create-library ', { bgcolor: C.accent, color: 16, effect: ['bold'] }) +
-        text('  scaffold projects from tokenized templates', { color: C.muted })
-    );
-    console.log(divider());
-};
-
-const templateLabel = (t: LoadedTemplate): string => {
-    const m = t.manifest;
-    return `${m.name}@${m.version ?? '1.0.0'}  [${outputModeOf(t)}]  ${m.title && m.title !== m.name ? '— ' + m.title : ''}`;
-};
+const modeBadge = (mode: 'new' | 'merge'): string =>
+    mode === 'merge' ? pc.bgYellow(pc.black(' MERGE ')) : pc.bgGreen(pc.black(' NEW '));
 
 async function pickTemplate(templates: LoadedTemplate[], wanted?: string): Promise<LoadedTemplate> {
     if (wanted) {
         const found = findTemplate(wanted);
         if (!found) {
-            console.error(text(`Unknown template: ${wanted}`, { color: C.warn }));
-            console.error(`Available: ${templates.map((t) => t.manifest.name).join(', ')}`);
+            log.error(`Unknown template: ${wanted}`);
+            log.info(`Available: ${templates.map((t) => t.manifest.name).join(', ')}`);
             process.exit(1);
         }
         return found;
     }
     if (templates.length === 1) return templates[0];
 
-    const labels = templates.map(templateLabel);
-    const wizard = new Terminal<{ choice: string }>();
-    wizard.initState({ choice: labels[0] });
-    wizard.newLine(
-        text(' TEMPLATE ', { bgcolor: C.token, color: 16, effect: ['bold'] }) +
-        text('  pick what to generate', { color: C.muted })
-    );
-    wizard.newSelectLine(labels, (sel, state) => ({ ...state, choice: String(sel) }));
-    await wizard.draw({ clean: true });
-    const idx = Math.max(0, labels.indexOf(wizard.state?.choice ?? labels[0]));
-    return templates[idx];
+    const value = await select({
+        message: 'Pick a template',
+        options: templates.map((t) => ({
+            value: t.manifest.name,
+            label: `${t.manifest.name}@${t.manifest.version ?? '1.0.0'}`,
+            hint: `${outputModeOf(t)}${t.manifest.title && t.manifest.title !== t.manifest.name ? ' · ' + t.manifest.title : ''}`,
+        })),
+    });
+    if (isCancel(value)) {
+        cancel('Cancelled.');
+        process.exit(1);
+    }
+    return findTemplate(String(value))!;
 }
 
-/** One-line card describing what was selected. */
+/** Card summarizing what was selected. */
 const printTemplateCard = (t: LoadedTemplate) => {
     const m = t.manifest;
     const cfg = tokenConfigOf(t);
     const vars = resolveVariables(t);
-    console.log(br());
-    console.log(
-        text('  ▸ ', { color: C.accent }) + text(m.title ?? m.name, { effect: ['bold'] }) +
-        text(`  v${m.version ?? '1.0.0'}`, { color: C.muted }) +
-        '  ' + modeBadge(outputModeOf(t))
-    );
-    if (m.description) console.log(text(`    ${m.description}`, { color: C.muted }));
-    console.log(text(`    tokens ${cfg.start}…${cfg.end} · ${vars.length} variable(s) · ${(m.features ?? []).length} feature(s)`, { color: C.muted }));
+    const lines = [
+        `${pc.bold(m.title ?? m.name)} ${pc.dim(`v${m.version ?? '1.0.0'}`)}  ${modeBadge(outputModeOf(t))}`,
+        ...(m.description ? [pc.dim(m.description)] : []),
+        pc.dim(`tokens ${cfg.start}…${cfg.end} · ${vars.length} variable(s) · ${(m.features ?? []).length} feature(s)`),
+    ];
+    note(lines.join('\n'), 'Template');
 };
-
-const modeBadge = (mode: 'new' | 'merge'): string =>
-    mode === 'merge'
-        ? text(' MERGE ', { bgcolor: C.warn, color: 16, effect: ['bold'] })
-        : text(' NEW ', { bgcolor: C.ok, color: 16, effect: ['bold'] });
 
 const featureSummary = (features: Record<string, boolean | string>): string =>
     Object.entries(features)
@@ -124,20 +105,19 @@ const warnEmptyTokens = (template: LoadedTemplate, answers: Record<string, strin
     const empty = Object.entries(tokens).filter(([, v]) => v === '').map(([k]) => k);
     if (!empty.length) return;
     const cfg = tokenConfigOf(template);
-    console.log(
-        text('  ⚠ empty value for: ', { color: C.warn }) +
-        empty.map((tk) => text(`${cfg.start}${tk}${cfg.end}`, { color: C.token })).join(', ') +
-        text('  (they will be replaced with nothing)', { color: C.muted })
+    log.warn(
+        `empty value for: ${empty.map((tk) => pc.magenta(`${cfg.start}${tk}${cfg.end}`)).join(', ')}` +
+        pc.dim('  (they will be replaced with nothing)')
     );
 };
 
 async function main() {
     const args = parseArgs(process.argv.slice(2));
-    banner();
+    intro(pc.bgCyan(pc.black(' create-library ')) + pc.dim('  scaffold projects from tokenized templates'));
 
     const templates = listTemplates();
     if (!templates.length) {
-        console.error('No templates found. Create one with the back-office: npm run bo:web');
+        log.error('No templates found. Create one with the back-office: npm run bo:web');
         process.exit(1);
     }
 
@@ -148,7 +128,7 @@ async function main() {
         const preset = loadPreset(args.preset);
         const found = preset.template ? findTemplate(preset.template) : undefined;
         if (!found) {
-            console.error(`Preset references unknown template: ${preset.template}`);
+            log.error(`Preset references unknown template: ${preset.template}`);
             process.exit(1);
         }
         template = found;
@@ -172,7 +152,7 @@ async function main() {
 
     if (args.savePreset) {
         savePreset(args.savePreset, { template: template.manifest.name, answers, features });
-        console.log(text(`  Saved preset to ${args.savePreset}`, { color: C.ok }));
+        log.success(`Saved preset to ${args.savePreset}`);
     }
 
     // ----- plan summary ---------------------------------------------------
@@ -180,63 +160,53 @@ async function main() {
     const projectName = answers[nameVarOf(template)] || template.manifest.name;
     const targetDir = mode === 'merge' ? into : path.join(into, projectName);
 
-    console.log(br());
-    console.log(divider());
-    console.log(
+    log.step(
         modeBadge(mode) +
         (mode === 'merge'
-            ? text('  merging into existing project → ', { color: C.muted }) + text(targetDir, { effect: ['bold'] })
-            : text('  creating new folder → ', { color: C.muted }) + text(targetDir, { effect: ['bold'] }))
+            ? pc.dim('  merging into existing project → ') + pc.bold(targetDir)
+            : pc.dim('  creating new folder → ') + pc.bold(targetDir))
     );
-    if (featureSummary(features)) console.log(text(`  features: ${featureSummary(features)}`, { color: C.muted }));
+    if (featureSummary(features)) log.info(pc.dim(`features: ${featureSummary(features)}`));
     warnEmptyTokens(template, answers);
-    if (mode === 'merge' && !args.force) {
-        console.log(text('  existing files are kept (use --force to overwrite)', { color: C.muted }));
-    }
-    console.log(divider());
+    if (mode === 'merge' && !args.force) log.info(pc.dim('existing files are kept (use --force to overwrite)'));
 
-    const spinner = process.stdout.isTTY ? new Spinner({ color: C.ok }, 'Working') : null;
-    spinner?.start();
+    const s = process.stdout.isTTY ? spinner() : null;
+    s?.start('Working');
 
     try {
         if (mode === 'merge') {
             if (!fs.existsSync(into)) throw new Error(`Target directory does not exist: ${into}`);
             const { tokens, report } = mergeInto({ template, projectDir: into, answers, features, force: args.force });
-            if (spinner) spinner.stop('Merged'); else console.log('Merged');
+            s?.stop('Merged');
 
-            console.log(br());
-            console.log(text(`  ✔ Merged "${template.manifest.name}" into ${into}`, { color: C.ok }));
-            console.log(text(`    ${report.created.length} file(s) added${report.packageJsonMerged ? ', package.json merged' : ''}`, { color: C.muted }));
-            for (const f of report.created.slice(0, 12)) console.log(text(`      + ${f}`, { color: C.ok }));
-            if (report.created.length > 12) console.log(text(`      … +${report.created.length - 12} more`, { color: C.muted }));
+            log.success(`Merged "${template.manifest.name}" into ${into}`);
+            log.info(pc.dim(`${report.created.length} file(s) added${report.packageJsonMerged ? ', package.json merged' : ''}`));
+            for (const f of report.created.slice(0, 12)) log.info(pc.green(`  + ${f}`));
+            if (report.created.length > 12) log.info(pc.dim(`  … +${report.created.length - 12} more`));
             if (report.skipped.length) {
-                console.log(text(`    ${report.skipped.length} existing file(s) kept (use --force to overwrite):`, { color: C.warn }));
-                for (const f of report.skipped) console.log(text(`      = ${f}`, { color: C.warn }));
+                log.warn(`${report.skipped.length} existing file(s) kept (use --force to overwrite):`);
+                for (const f of report.skipped) log.warn(pc.yellow(`  = ${f}`));
             }
-            printNextSteps(template, tokens);
+            finish(template, tokens);
         } else {
             const { tokens } = generate({ template, targetDir, answers, features });
-            if (spinner) spinner.stop(`Created ${projectName}`); else console.log(`Created ${projectName}`);
-
-            console.log(br());
-            console.log(text(`  ✔ Created ${targetDir}`, { color: C.ok }));
-            printNextSteps(template, tokens);
+            s?.stop(`Created ${projectName}`);
+            log.success(`Created ${targetDir}`);
+            finish(template, tokens);
         }
     } catch (err) {
-        if (spinner) spinner.stop('Failed');
+        s?.stop('Failed');
         throw err;
     }
 }
 
-const printNextSteps = (template: LoadedTemplate, tokens: Record<string, string>) => {
+const finish = (template: LoadedTemplate, tokens: Record<string, string>) => {
     const steps = renderNextSteps(template, tokens);
-    if (!steps.length) return;
-    console.log(br());
-    console.log(text('  Next steps:', { effect: ['bold'] }));
-    for (const step of steps) console.log(text(`    ${step}`, { color: C.accent }));
+    if (steps.length) note(steps.map((st) => pc.cyan(st)).join('\n'), 'Next steps');
+    outro(pc.green('Done.'));
 };
 
 main().catch((err) => {
-    console.error(text(`✖ ${err instanceof Error ? err.message : String(err)}`, { color: 196 }));
+    log.error(err instanceof Error ? err.message : String(err));
     process.exit(1);
 });

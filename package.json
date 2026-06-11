@@ -27,7 +27,8 @@
     "web"
   ],
   "dependencies": {
-    "@virtual-registry/mandolin": "^1.1.9"
+    "@clack/prompts": "^1.5.1",
+    "picocolors": "^1.1.1"
   },
   "devDependencies": {
     "@types/node": "^20.2.1",
