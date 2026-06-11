@@ -7,6 +7,7 @@ import {
     LoadedTemplate,
     PromptDef,
     addTemplateDir,
+    detectForeignTokens,
     exportTemplate,
     findTemplate,
     generate,
@@ -64,6 +65,7 @@ const serialize = (t: LoadedTemplate) => ({
     features: t.manifest.features ?? [],
     tokenConfig: tokenConfigOf(t),
     variables: resolveVariables(t),
+    foreignTokens: detectForeignTokens(t),
 });
 
 const requireTemplate = (name: string): LoadedTemplate => {

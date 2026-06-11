@@ -1,18 +1,22 @@
 # virtuallab-create-library
 
 A manifest-driven scaffolding system. It generates projects from **templates**,
-lets you **configure what each template produces** (components, Storybook, tests,
-styling…) through conditional features, and ships a terminal **back-office** to
-create, configure and tokenize templates so they can be reused across apps.
+replaces **dynamic tokens** (`@@name@@`) with user-entered values across file
+contents *and* file names, supports conditional **features**, and ships a
+React/MUI web **back-office** to author, configure, version and publish
+templates so they can be reused across apps.
 
-## Generate a project
+Full docs live in [`docs/`](docs/README.md).
+
+## Generate a project (CLI)
 
 ```bash
 npx virtuallab-create-library
 ```
 
-It discovers the available templates, asks the template's questions, lets you
-toggle its features, and writes the configured project into a new folder.
+It discovers the available templates (including the latest **published**
+version of each), asks the template's questions, lets you toggle its features,
+and writes the configured project — every placeholder replaced.
 
 Flags:
 
@@ -22,34 +26,37 @@ Flags:
 - `--merge` / `--new` — force the output mode (otherwise the template decides)
 - `--force` — in merge mode, overwrite conflicting files
 
-## Back-office
-
-```bash
-npx virtuallab-create-library-bo
-```
-
-A **web** back-office is also available — same capabilities in the browser:
+## Back-office (web)
 
 ```bash
 npm run bo:web        # or: npx virtuallab-create-library-bo-web
 ```
 
-It starts a local server on http://localhost:4517 (or the next free port) and opens it automatically. Override with `PORT=5000 npm run bo:web`.
+Starts a local server on http://localhost:4517 (next free port if busy;
+override with `PORT=5000`). Dark-theme single-page app:
 
-From the menu you can:
-
-- **Configure & generate** — pick a template, answer its variables, choose features, generate now
-- **Configure & save preset** / **Generate from preset**
-- **Create template** — scaffold a new template (choose `new` or `merge` output)
-- **Add variable to template** — define a dynamic variable (the field create-library will ask)
-- **Add component to template** — create a component overlay and register it as a feature
-- **Set template output mode** — `new` (folder) or `merge` (integrate)
-- **List / Validate** templates and **register external directories**
+- **Editor** (center) — VSCode-style Monaco editor over the template's files:
+  resizable explorer, drag-and-drop move, selection-aware create,
+  rename/delete with confirmation, dirty-state guards.
+- **Right panel** — everything about the selected template:
+  - *Template settings* — title, description, version, output mode, validate.
+  - *Variables* — configurable token delimiters and an inspector of
+    **auto-detected** tokens (question, default, type, CLI exposure) with
+    auto-save and a mismatch warning when files use different delimiters.
+  - *Export* — fill the variable values and produce output with every
+    placeholder replaced (new folder, or merge into an existing project).
+  - *Publish to registry* — bump (patch/minor/major) and snapshot the template
+    (placeholders intact) into the local registry the CLI consumes.
+  - *Components & dirs* — component scaffolding, external template dirs.
+- **New template** — scaffold from samples or **import any directory** as a
+  template payload (`node_modules`/`.git` excluded, tokens auto-detected).
+- **Open folder…** — edit any directory as a workspace, no manifest needed.
 
 ## How a template works
 
-A template is a folder with a `template.json` manifest, a base `template/`
-payload, and optional feature overlays:
+A template is a folder with a `template.json` manifest, a payload (in a
+`template/` subfolder, or flat at the root with `"source": "."`), and optional
+feature overlays:
 
 ```
 my-template/
@@ -58,38 +65,40 @@ my-template/
   features/
     storybook/         # overlay copied only when the feature is enabled
     tests/
-    styling-css/
 ```
 
 Generation: copy the base payload → overlay each enabled feature → resolve
 `/* inject:<marker> */` snippets → merge `package.json` (base + features) →
-replace `__TOKEN__` placeholders across every text file → run hooks.
+replace dynamic tokens across every text file and path → run hooks.
+
+### Dynamic tokens
+
+Wrap a token in the template's delimiters — `@@…@@` by default, configurable
+per template via `tokenConfig` (templates without one use the legacy `__…__`).
+Tokens are auto-detected from file contents and names, so a payload like
+`src/components/@@NAME@@/@@NAME@@.tsx` becomes `src/components/Card/Card.tsx`.
+Each token carries metadata (question, default, type) and an `exposeCli` flag —
+when `false`, the CLI uses the default instead of asking.
 
 ### Output mode
 
-A template declares how it is delivered with `"output"`:
-
 - `"new"` (default) — create a brand-new project folder named after a variable.
-- `"merge"` — integrate the template into an **existing project**: files are copied
-  in (existing files are kept unless `--force`), and the template's dependencies
-  and scripts are merged into the project's `package.json` (name and version are
-  preserved). Run `create-library` from inside the project, or pass `--into <dir>`.
-
-Tokens are replaced in **file contents and in file/directory names**, so a payload
-like `src/components/__NAME__/__NAME__.tsx` becomes `src/components/Card/Card.tsx`.
-
-The bundled `react-component` template is a `merge` example: it asks for a component
-name and adds `src/components/<Name>/` into your app.
+- `"merge"` — integrate into an **existing project**: files are copied in
+  (existing files kept unless `--force`), and the template's dependencies and
+  scripts are merged into the project's `package.json`.
 
 ### Manifest
 
 ```jsonc
 {
   "name": "my-template",
-  "nameVar": "name",                     // prompt whose answer names the folder
+  "version": "1.0.0",
+  "tokenConfig": { "start": "@@", "end": "@@" },
+  "nameVar": "name",
   "prompts": [
     { "name": "name", "message": "Project name", "type": "text",
-      "default": "my-app", "token": "REPLACE", "validate": "packageName" }
+      "default": "my-app", "token": "REPLACE", "validate": "packageName",
+      "exposeCli": true }
   ],
   "features": [
     {
@@ -102,55 +111,47 @@ name and adds `src/components/<Name>/` into your app.
       "id": "styling", "label": "Styling", "type": "select",
       "options": ["mui", "css"], "default": "mui",
       "variants": {
-        "mui": { "overlay": "features/styling-mui", "packageJson": { } },
+        "mui": { "overlay": "features/styling-mui" },
         "css": { "overlay": "features/styling-css" }
       }
-    },
-    {
-      "id": "button", "label": "Include a Button", "type": "boolean", "default": false,
-      "overlay": "features/button",
-      "inject": [
-        { "file": "src/components/index.ts", "marker": "componentExports",
-          "content": "export * from './Button';" }
-      ]
     }
   ],
-  "nextSteps": ["cd __REPLACE__", "npm install"]
+  "nextSteps": ["cd @@REPLACE@@", "npm install"]
 }
 ```
 
-A feature can contribute an **overlay** (files), a **packageJson** patch
-(dependencies / scripts), **inject** snippets (at `/* inject:<marker> */`
-markers in base files), and **tokens**.
+A feature can contribute an **overlay** (files), a **packageJson** patch,
+**inject** snippets (at `/* inject:<marker> */` markers), and **tokens**.
 
-### Presets
+## Versioning & publishing
 
-A preset is just a saved configuration:
-
-```json
-{ "template": "vite-react-ubundle",
-  "answers": { "name": "acme-ui" },
-  "features": { "styling": "css", "storybook": false, "tests": true, "button": true } }
-```
+From the back-office, *Publish to registry* exports a versioned snapshot of a
+template into `~/.virtuallab-create-library/published/<name>/<version>/`
+(optionally bumping `version` first). The CLI and the back-office discover the
+**latest** published version of each template automatically; a local working
+copy with the same name takes precedence.
 
 ## Where templates live
 
 Discovered, in order, from: the bundled `templates/` directory, the
-`VLCL_TEMPLATES_DIR` environment variable (OS path-delimiter separated), and
-directories saved in `~/.virtuallab-create-library.json`. First name wins.
+`VLCL_TEMPLATES_DIR` environment variable (OS path-delimiter separated),
+directories saved in `~/.virtuallab-create-library.json` (a registered
+directory may also *be* a template itself), and the published registry.
+First name wins.
 
 ## Architecture
 
 The engine (`engine/`) is UI-free and reusable: manifest load/validate,
-discovery, feature resolution, overlay + inject, package.json merge, token
-replacement, presets, scaffolding. The `generate` and `bo` CLIs are thin layers
-on top, leaving room for a future web back-office on the same engine.
+discovery, token detection/replacement, feature resolution, overlay + inject,
+package.json merge, presets, scaffolding/import, publishing. The CLIs and the
+web back-office are thin layers on top.
 
 ## Development
 
 ```bash
-npm install
-npm run build      # compile TypeScript
-npm run dev        # run the generator
-npm run bo         # run the back-office
+yarn install
+yarn build            # compile engine + CLIs
+yarn bo:web:build     # build the web UI into web/
+yarn bo:web           # run the back-office server
+yarn bo:web:ui        # Vite dev server with /api proxy (alongside bo:web)
 ```

@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.resolveVariables = exports.detectTokens = exports.tokenConfigOf = exports.DEFAULT_TOKEN_CONFIG = void 0;
+exports.resolveVariables = exports.detectForeignTokens = exports.detectTokens = exports.tokenConfigOf = exports.DEFAULT_TOKEN_CONFIG = void 0;
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const fsx_1 = require("./fsx");
@@ -57,12 +57,8 @@ const scanDirs = (template) => {
     }
     return dirs;
 };
-/**
- * Scan a template's files (contents and path names) for dynamic tokens and
- * return the unique token names, sorted. This is what drives the inspector.
- */
-const detectTokens = (template) => {
-    const cfg = (0, exports.tokenConfigOf)(template);
+/** Scan a template's files (contents and path names) for tokens wrapped in `cfg`. */
+const scanForTokens = (template, cfg) => {
     const found = new Set();
     const collect = (text) => {
         const re = tokenRegex(cfg);
@@ -81,7 +77,36 @@ const detectTokens = (template) => {
     }
     return [...found].sort();
 };
+/**
+ * Scan a template's files for dynamic tokens using its configured delimiters
+ * and return the unique token names, sorted. This drives the inspector.
+ */
+const detectTokens = (template) => scanForTokens(template, (0, exports.tokenConfigOf)(template));
 exports.detectTokens = detectTokens;
+/** Delimiter styles people commonly use; checked for mismatch warnings. */
+const COMMON_TOKEN_CONFIGS = [
+    { start: '@@', end: '@@' },
+    { start: '__', end: '__' },
+    { start: '{{', end: '}}' },
+];
+/**
+ * Tokens written with a *different* delimiter style than the template's
+ * configured one. These would NOT be replaced at generation time — surfaced
+ * in the UI as a "did you mean to switch delimiters?" warning.
+ */
+const detectForeignTokens = (template) => {
+    const active = (0, exports.tokenConfigOf)(template);
+    const out = [];
+    for (const cfg of COMMON_TOKEN_CONFIGS) {
+        if (cfg.start === active.start && cfg.end === active.end)
+            continue;
+        const tokens = scanForTokens(template, cfg);
+        if (tokens.length)
+            out.push({ config: cfg, tokens });
+    }
+    return out;
+};
+exports.detectForeignTokens = detectForeignTokens;
 const toVariable = (p, detected) => ({
     name: p.name,
     token: p.token || p.name,

@@ -37,6 +37,11 @@ export interface Variable {
     detected: boolean;
 }
 
+export interface ForeignTokens {
+    config: TokenConfig;
+    tokens: string[];
+}
+
 export interface Template {
     name: string;
     title: string;
@@ -49,6 +54,7 @@ export interface Template {
     features: FeatureDef[];
     tokenConfig: TokenConfig;
     variables: Variable[];
+    foreignTokens: ForeignTokens[];
 }
 
 export interface PublishedVersion {

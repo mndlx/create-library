@@ -74,6 +74,7 @@ const serialize = (t) => ({
     features: t.manifest.features ?? [],
     tokenConfig: (0, engine_1.tokenConfigOf)(t),
     variables: (0, engine_1.resolveVariables)(t),
+    foreignTokens: (0, engine_1.detectForeignTokens)(t),
 });
 const requireTemplate = (name) => {
     const t = (0, engine_1.findTemplate)(name);

@@ -2,6 +2,7 @@ import AddIcon from '@mui/icons-material/Add';
 import CheckIcon from '@mui/icons-material/Check';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import SyncIcon from '@mui/icons-material/Sync';
+import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
@@ -133,6 +134,11 @@ export function VariablesPanel({ template, notify, reload }: Props) {
 
     const delimitersDirty = start !== template.tokenConfig.start || end !== template.tokenConfig.end;
 
+    const switchDelimiters = async (s: string, e: string) => {
+        try { await api.setTokenConfig({ templateName: template.name, start: s, end: e }); notify(`Delimiters switched to ${s}…${e}`, 'success'); reload(); }
+        catch (err) { notify((err as Error).message, 'error'); }
+    };
+
     const addVariable = async () => {
         const token = newToken.trim();
         if (!token) return notify('Token name required', 'error');
@@ -167,6 +173,24 @@ export function VariablesPanel({ template, notify, reload }: Props) {
                     <Button size="small" startIcon={<SyncIcon />} onClick={reload}>Sync</Button>
                 </Tooltip>
             </Stack>
+
+            {template.foreignTokens.map((f) => (
+                <Alert
+                    key={f.config.start + f.config.end}
+                    severity="warning"
+                    sx={{ mt: 1.5 }}
+                    action={
+                        <Button color="inherit" size="small" onClick={() => switchDelimiters(f.config.start, f.config.end)}>
+                            Use {f.config.start}…{f.config.end}
+                        </Button>
+                    }
+                >
+                    Found {f.config.start}…{f.config.end}-style tokens ({f.tokens.slice(0, 4).join(', ')}
+                    {f.tokens.length > 4 ? `, +${f.tokens.length - 4}` : ''}) but the delimiters are{' '}
+                    {template.tokenConfig.start}…{template.tokenConfig.end} — they won't be replaced. If they're meant
+                    to be variables, switch; otherwise ignore.
+                </Alert>
+            ))}
 
             <Divider sx={{ my: 1.5 }} />
 

@@ -27,12 +27,8 @@ const scanDirs = (template: LoadedTemplate): string[] => {
     return dirs;
 };
 
-/**
- * Scan a template's files (contents and path names) for dynamic tokens and
- * return the unique token names, sorted. This is what drives the inspector.
- */
-export const detectTokens = (template: LoadedTemplate): string[] => {
-    const cfg = tokenConfigOf(template);
+/** Scan a template's files (contents and path names) for tokens wrapped in `cfg`. */
+const scanForTokens = (template: LoadedTemplate, cfg: TokenConfig): string[] => {
     const found = new Set<string>();
     const collect = (text: string) => {
         const re = tokenRegex(cfg);
@@ -48,6 +44,41 @@ export const detectTokens = (template: LoadedTemplate): string[] => {
         }
     }
     return [...found].sort();
+};
+
+/**
+ * Scan a template's files for dynamic tokens using its configured delimiters
+ * and return the unique token names, sorted. This drives the inspector.
+ */
+export const detectTokens = (template: LoadedTemplate): string[] =>
+    scanForTokens(template, tokenConfigOf(template));
+
+/** Delimiter styles people commonly use; checked for mismatch warnings. */
+const COMMON_TOKEN_CONFIGS: TokenConfig[] = [
+    { start: '@@', end: '@@' },
+    { start: '__', end: '__' },
+    { start: '{{', end: '}}' },
+];
+
+export interface ForeignTokens {
+    config: TokenConfig;
+    tokens: string[];
+}
+
+/**
+ * Tokens written with a *different* delimiter style than the template's
+ * configured one. These would NOT be replaced at generation time — surfaced
+ * in the UI as a "did you mean to switch delimiters?" warning.
+ */
+export const detectForeignTokens = (template: LoadedTemplate): ForeignTokens[] => {
+    const active = tokenConfigOf(template);
+    const out: ForeignTokens[] = [];
+    for (const cfg of COMMON_TOKEN_CONFIGS) {
+        if (cfg.start === active.start && cfg.end === active.end) continue;
+        const tokens = scanForTokens(template, cfg);
+        if (tokens.length) out.push({ config: cfg, tokens });
+    }
+    return out;
 };
 
 export interface ResolvedVariable {
