@@ -7,3 +7,7 @@ desktop.ini
 
 package-lock.json
 *.tsbuildinfo
+
+# local template/experiment folders at repo root
+/Test/
+/my-app/
