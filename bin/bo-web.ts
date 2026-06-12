@@ -16,6 +16,7 @@ import {
     importTemplate,
     listPublishedVersions,
     loadManifest,
+    publishedRoot,
     listTemplates,
     mergeInto,
     nameVarOf,
@@ -251,6 +252,39 @@ async function handleApi(
         const errors = validateManifest(m);
         if (errors.length) throw new Error(errors.join('; '));
         writeRawManifest(t.dir, m);
+        return sendJson(res, 200, { ok: true });
+    }
+
+    // Rename a template: update the manifest name and, when the folder is
+    // named after the template, rename the folder too.
+    if (req.method === 'POST' && pathname === '/api/rename-template') {
+        const t = requireTemplate(body.templateName);
+        const newName = String(body.newName || '').trim();
+        if (!newName) throw new Error('A new name is required');
+        if (newName !== t.manifest.name && findTemplate(newName)) throw new Error(`A template named "${newName}" already exists`);
+        const m = readRawManifest(t.dir);
+        m.name = newName;
+        const errors = validateManifest(m);
+        if (errors.length) throw new Error(errors.join('; '));
+        writeRawManifest(t.dir, m);
+        let dir = t.dir;
+        if (path.basename(t.dir) === body.templateName) {
+            const dest = path.join(path.dirname(t.dir), newName);
+            if (!fs.existsSync(dest)) {
+                fs.renameSync(t.dir, dest);
+                dir = dest;
+            }
+        }
+        return sendJson(res, 200, { ok: true, name: newName, dir });
+    }
+
+    // Delete a template's working copy (and optionally its published versions).
+    if (req.method === 'POST' && pathname === '/api/delete-template') {
+        const t = requireTemplate(body.templateName);
+        fs.rmSync(t.dir, { recursive: true, force: true });
+        if (body.deletePublished) {
+            fs.rmSync(path.join(publishedRoot(), t.manifest.name), { recursive: true, force: true });
+        }
         return sendJson(res, 200, { ok: true });
     }
 

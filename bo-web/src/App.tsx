@@ -270,7 +270,10 @@ export function App() {
                                         sx={{ width: '5px', cursor: 'col-resize', flexShrink: 0, borderLeft: 1, borderColor: 'divider', '&:hover': { bgcolor: 'primary.main' } }}
                                     />
                                     <Box sx={{ width: panelW, flexShrink: 0, borderLeft: 1, borderColor: 'divider', minHeight: 0 }}>
-                                        <RightPanel template={template} state={state} notify={notify} reload={reload} onResult={setResult} />
+                                        <RightPanel
+                                            template={template} state={state} notify={notify} reload={reload} onResult={setResult}
+                                            onRenamed={(n) => { reload().then(() => setSelected(n)); }}
+                                        />
                                     </Box>
                                 </>
                             )}

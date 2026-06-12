@@ -239,6 +239,40 @@ async function handleApi(req, res, pathname, query) {
         (0, engine_1.writeRawManifest)(t.dir, m);
         return sendJson(res, 200, { ok: true });
     }
+    // Rename a template: update the manifest name and, when the folder is
+    // named after the template, rename the folder too.
+    if (req.method === 'POST' && pathname === '/api/rename-template') {
+        const t = requireTemplate(body.templateName);
+        const newName = String(body.newName || '').trim();
+        if (!newName)
+            throw new Error('A new name is required');
+        if (newName !== t.manifest.name && (0, engine_1.findTemplate)(newName))
+            throw new Error(`A template named "${newName}" already exists`);
+        const m = (0, engine_1.readRawManifest)(t.dir);
+        m.name = newName;
+        const errors = (0, engine_1.validateManifest)(m);
+        if (errors.length)
+            throw new Error(errors.join('; '));
+        (0, engine_1.writeRawManifest)(t.dir, m);
+        let dir = t.dir;
+        if (path.basename(t.dir) === body.templateName) {
+            const dest = path.join(path.dirname(t.dir), newName);
+            if (!fs.existsSync(dest)) {
+                fs.renameSync(t.dir, dest);
+                dir = dest;
+            }
+        }
+        return sendJson(res, 200, { ok: true, name: newName, dir });
+    }
+    // Delete a template's working copy (and optionally its published versions).
+    if (req.method === 'POST' && pathname === '/api/delete-template') {
+        const t = requireTemplate(body.templateName);
+        fs.rmSync(t.dir, { recursive: true, force: true });
+        if (body.deletePublished) {
+            fs.rmSync(path.join((0, engine_1.publishedRoot)(), t.manifest.name), { recursive: true, force: true });
+        }
+        return sendJson(res, 200, { ok: true });
+    }
     // Update manifest metadata (title, description, version, output).
     if (req.method === 'POST' && pathname === '/api/set-meta') {
         const t = requireTemplate(body.templateName);

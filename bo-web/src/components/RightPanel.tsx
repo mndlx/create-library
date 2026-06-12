@@ -31,24 +31,32 @@ interface SectionProps {
 
 /* ------------------------------- Template ------------------------------- */
 
-function TemplateSection({ template, notify, reload }: SectionProps) {
+function TemplateSection({ template, notify, reload, onRenamed }: SectionProps & { onRenamed: (name: string) => void }) {
+    const { confirm } = useDialogs();
+    const [name, setName] = useState(template.name);
     const [title, setTitle] = useState(template.title);
     const [description, setDescription] = useState(template.description);
     const [version, setVersion] = useState(template.version);
 
     useEffect(() => {
-        setTitle(template.title); setDescription(template.description);
-        setVersion(template.version);
+        setName(template.name); setTitle(template.title);
+        setDescription(template.description); setVersion(template.version);
     }, [template]);
 
-    const dirty = title !== template.title || description !== template.description
-        || version !== template.version;
+    const dirty = name !== template.name || title !== template.title
+        || description !== template.description || version !== template.version;
 
     const save = async () => {
         try {
-            await api.setMeta({ templateName: template.name, title, description, version });
+            let current = template.name;
+            if (name.trim() && name.trim() !== template.name) {
+                const r = await api.renameTemplate({ templateName: template.name, newName: name.trim() });
+                current = r.name;
+            }
+            await api.setMeta({ templateName: current, title, description, version });
             notify('Template settings saved', 'success');
-            reload();
+            if (current !== template.name) onRenamed(current);
+            else reload();
         } catch (e) { notify((e as Error).message, 'error'); }
     };
 
@@ -59,14 +67,33 @@ function TemplateSection({ template, notify, reload }: SectionProps) {
         } catch (e) { notify((e as Error).message, 'error'); }
     };
 
+    const del = async () => {
+        const ok = await confirm({
+            title: 'Delete template',
+            message: `Delete "${template.name}" and all its files from disk? Published versions in the registry are removed too. This cannot be undone.`,
+            confirmText: 'Delete template',
+            danger: true,
+        });
+        if (!ok) return;
+        try {
+            await api.deleteTemplate({ templateName: template.name, deletePublished: true });
+            notify(`Deleted "${template.name}"`, 'info');
+            reload();
+        } catch (e) { notify((e as Error).message, 'error'); }
+    };
+
     return (
         <Stack spacing={1.5}>
+            <TextField size="small" label="Name" value={name} onChange={(e) => setName(e.target.value)}
+                helperText={name !== template.name ? 'Renames the manifest and the template folder.' : undefined} />
             <TextField size="small" label="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
             <TextField size="small" label="Description" multiline maxRows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
             <TextField size="small" label="Version" value={version} onChange={(e) => setVersion(e.target.value)} sx={{ width: 130 }} />
             <Stack direction="row" spacing={1}>
                 <Button size="small" variant="contained" disabled={!dirty} onClick={save}>Save settings</Button>
                 <Button size="small" variant="outlined" onClick={validate}>Validate</Button>
+                <Box sx={{ flex: 1 }} />
+                <Button size="small" color="error" variant="outlined" onClick={del}>Delete…</Button>
             </Stack>
             <Typography variant="caption" color="text.secondary" sx={{ wordBreak: 'break-all' }}>{template.dir}</Typography>
         </Stack>
@@ -280,6 +307,7 @@ interface PanelProps {
     notify: Notify;
     reload: () => void;
     onResult: (r: unknown) => void;
+    onRenamed: (name: string) => void;
 }
 
 function Section({ title, defaultExpanded, children }: { title: string; defaultExpanded?: boolean; children: React.ReactNode }) {
@@ -293,7 +321,7 @@ function Section({ title, defaultExpanded, children }: { title: string; defaultE
     );
 }
 
-export function RightPanel({ template, state, notify, reload, onResult }: PanelProps) {
+export function RightPanel({ template, state, notify, reload, onResult, onRenamed }: PanelProps) {
     return (
         <Box sx={{ height: '100%', overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
             <Box sx={{ px: 2, py: 1.5, borderBottom: 1, borderColor: 'divider' }}>
@@ -304,7 +332,7 @@ export function RightPanel({ template, state, notify, reload, onResult }: PanelP
             </Box>
             <Box sx={{ flex: 1, overflow: 'auto' }}>
                 <Section title="Template settings">
-                    <TemplateSection template={template} state={state} notify={notify} reload={reload} />
+                    <TemplateSection template={template} state={state} notify={notify} reload={reload} onRenamed={onRenamed} />
                 </Section>
                 <Divider />
                 <Section title="Variables" defaultExpanded>

@@ -120,6 +120,10 @@ export const api = {
     setTokenConfig: (p: { templateName: string; start: string; end: string }) => req<{ ok: true }>('/api/set-token-config', p),
     setMeta: (p: { templateName: string; title?: string; description?: string; version?: string; output?: OutputMode }) =>
         req<{ ok: true }>('/api/set-meta', p),
+    renameTemplate: (p: { templateName: string; newName: string }) =>
+        req<{ name: string; dir: string }>('/api/rename-template', p),
+    deleteTemplate: (p: { templateName: string; deletePublished?: boolean }) =>
+        req<{ ok: true }>('/api/delete-template', p),
     exportTemplate: (p: { templateName: string; bump?: 'patch' | 'minor' | 'major'; overwrite?: boolean }) =>
         req<{ name: string; version: string; dir: string }>('/api/export', p),
     published: (template: string) => req<{ versions: PublishedVersion[] }>('/api/published?' + qs({ template })),
