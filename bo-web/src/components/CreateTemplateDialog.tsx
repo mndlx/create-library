@@ -1,13 +1,21 @@
+import AddBoxOutlinedIcon from '@mui/icons-material/AddBoxOutlined';
+import DriveFolderUploadOutlinedIcon from '@mui/icons-material/DriveFolderUploadOutlined';
 import Button from '@mui/material/Button';
+import Collapse from '@mui/material/Collapse';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
+import Link from '@mui/material/Link';
 import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
+import ToggleButton from '@mui/material/ToggleButton';
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
+import Typography from '@mui/material/Typography';
 import { useEffect, useState } from 'react';
-import { api, type OutputMode } from '../api';
+import { api } from '../api';
+import { FolderField } from './FolderPicker';
 
 interface Props {
     open: boolean;
@@ -17,28 +25,39 @@ interface Props {
     onCreated: (name: string) => void;
 }
 
+type Mode = 'blank' | 'import';
+
 export function CreateTemplateDialog({ open, defaultDir, onClose, notify, onCreated }: Props) {
+    const [mode, setMode] = useState<Mode>('blank');
     const [name, setName] = useState('');
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
-    const [output, setOutput] = useState<OutputMode>('new');
     const [rootDir, setRootDir] = useState('');
-    const [layout, setLayout] = useState<'template' | '.'>('template');
     const [importFrom, setImportFrom] = useState('');
+    const [layout, setLayout] = useState<'template' | '.'>('template');
+    const [advanced, setAdvanced] = useState(false);
     const [busy, setBusy] = useState(false);
 
     useEffect(() => {
         if (open) {
-            setName(''); setTitle(''); setDescription(''); setOutput('new'); setRootDir(''); setLayout('template'); setImportFrom('');
+            setMode('blank'); setName(''); setTitle(''); setDescription('');
+            setRootDir(''); setImportFrom(''); setLayout('template'); setAdvanced(false);
             setBusy(false);
         }
     }, [open]);
 
     const submit = async () => {
         if (!name.trim()) return notify('A template name is required', 'error');
+        if (mode === 'import' && !importFrom.trim()) return notify('Pick the folder to import', 'error');
         setBusy(true);
         try {
-            const r = await api.createTemplate({ name: name.trim(), title, description, output, rootDir: rootDir || defaultDir, source: layout, importFrom: importFrom.trim() || undefined });
+            const r = await api.createTemplate({
+                name: name.trim(), title, description,
+                output: 'merge',
+                rootDir: rootDir || defaultDir,
+                source: layout,
+                importFrom: mode === 'import' ? importFrom.trim() : undefined,
+            });
             notify(`Template created at ${r.dir}`, 'success');
             onCreated(r.name);
             onClose();
@@ -54,43 +73,68 @@ export function CreateTemplateDialog({ open, defaultDir, onClose, notify, onCrea
             <DialogTitle>New template</DialogTitle>
             <DialogContent>
                 <Stack spacing={2} sx={{ mt: 1 }}>
+                    <ToggleButtonGroup
+                        exclusive fullWidth size="small" value={mode}
+                        onChange={(_, v) => v && setMode(v)}
+                    >
+                        <ToggleButton value="blank">
+                            <AddBoxOutlinedIcon fontSize="small" sx={{ mr: 1 }} /> Blank
+                        </ToggleButton>
+                        <ToggleButton value="import">
+                            <DriveFolderUploadOutlinedIcon fontSize="small" sx={{ mr: 1 }} /> Import a folder
+                        </ToggleButton>
+                    </ToggleButtonGroup>
+                    <Typography variant="caption" color="text.secondary">
+                        {mode === 'blank'
+                            ? 'Start from a minimal sample payload and add files in the editor.'
+                            : 'Copy an existing project as the template payload (node_modules / .git excluded). Its @@tokens@@ are detected automatically.'}
+                    </Typography>
+
+                    {mode === 'import' && (
+                        <FolderField
+                            label="Folder to import" value={importFrom} onChange={setImportFrom}
+                            pickerTitle="Folder to import"
+                        />
+                    )}
+
                     <TextField
                         autoFocus required size="small" label="Name" placeholder="my-template"
                         value={name} onChange={(e) => setName(e.target.value)}
                         onKeyDown={(e) => { if (e.key === 'Enter' && name.trim()) submit(); }}
-                        helperText="Folder name + manifest name (e.g. my-template)."
                     />
-                    <TextField size="small" label="Title" placeholder="My template" value={title} onChange={(e) => setTitle(e.target.value)} />
-                    <TextField size="small" label="Description" value={description} onChange={(e) => setDescription(e.target.value)} />
-                    <TextField select size="small" label="Output mode" value={output} onChange={(e) => setOutput(e.target.value as OutputMode)}>
-                        <MenuItem value="new">new — creates a folder</MenuItem>
-                        <MenuItem value="merge">merge — into an existing project</MenuItem>
-                    </TextField>
-                    <TextField
-                        select size="small" label="Payload layout" value={layout}
-                        onChange={(e) => setLayout(e.target.value as 'template' | '.')}
-                        helperText={layout === 'template'
-                            ? 'Files live in a template/ subfolder (manifest stays separate).'
-                            : 'Files live at the template root; manifest is excluded from output unless you opt in.'}
-                    >
-                        <MenuItem value="template">template/ subfolder</MenuItem>
-                        <MenuItem value=".">flat — payload at template root</MenuItem>
-                    </TextField>
-                    <TextField
-                        size="small" label="Create in directory" placeholder={defaultDir}
-                        value={rootDir} onChange={(e) => setRootDir(e.target.value)}
-                        helperText="Where the template folder is created. Auto-registered so it appears in the list."
+                    <TextField size="small" label="Title (optional)" value={title} onChange={(e) => setTitle(e.target.value)} />
+                    <TextField size="small" label="Description (optional)" value={description} onChange={(e) => setDescription(e.target.value)} />
+
+                    <FolderField
+                        label="Create in" value={rootDir} onChange={setRootDir}
+                        placeholder={defaultDir}
+                        helperText="Where the template folder is created — registered automatically."
+                        pickerTitle="Create template in"
                     />
-                    <TextField
-                        size="small" label="Import from directory (optional)" placeholder="C:\\path\\to\\existing-project"
-                        value={importFrom} onChange={(e) => setImportFrom(e.target.value)}
-                        helperText="Copy an existing folder as the template payload (node_modules/.git excluded). Tokens are auto-detected. Leave empty to scaffold sample files."
-                    />
+
+                    <Link component="button" type="button" variant="caption" underline="hover" sx={{ alignSelf: 'flex-start' }}
+                        onClick={() => setAdvanced((a) => !a)}>
+                        {advanced ? 'Hide advanced' : 'Advanced…'}
+                    </Link>
+                    <Collapse in={advanced}>
+                        <TextField
+                            select fullWidth size="small" label="Payload layout" value={layout}
+                            onChange={(e) => setLayout(e.target.value as 'template' | '.')}
+                            helperText={layout === 'template'
+                                ? 'Files live in a template/ subfolder (manifest stays separate).'
+                                : 'Files live at the template root; meta files are excluded from output unless opted in.'}
+                        >
+                            <MenuItem value="template">template/ subfolder</MenuItem>
+                            <MenuItem value=".">flat — payload at template root</MenuItem>
+                        </TextField>
+                    </Collapse>
                 </Stack>
             </DialogContent>
             <DialogActions>
                 <Button onClick={onClose}>Cancel</Button>
-                <Button variant="contained" disabled={busy || !name.trim()} onClick={submit}>Create</Button>
+                <Button variant="contained" disabled={busy || !name.trim() || (mode === 'import' && !importFrom.trim())} onClick={submit}>
+                    Create
+                </Button>
             </DialogActions>
         </Dialog>
     );

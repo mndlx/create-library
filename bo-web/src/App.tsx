@@ -30,6 +30,7 @@ import { CreateTemplateDialog } from './components/CreateTemplateDialog';
 import { useDialogs } from './components/dialogs';
 import { EditorView } from './components/EditorView';
 import { ExportDialog } from './components/ExportDialog';
+import { FolderPickerDialog } from './components/FolderPicker';
 import { GuideDialog } from './components/GuideDialog';
 import { RightPanel } from './components/RightPanel';
 
@@ -60,7 +61,7 @@ export function App() {
         }
     }, []);
 
-    const { prompt, confirm } = useDialogs();
+    const { confirm } = useDialogs();
     const notify = useCallback((msg: string, sev: Severity = 'info') => setSnack({ msg, sev }), []);
 
     /** Block navigation away from unsaved editor changes unless confirmed. */
@@ -101,16 +102,9 @@ export function App() {
         try { localStorage.removeItem(WS_KEY); } catch { /* storage blocked */ }
     }, [guardDirty]);
 
-    const openFolder = useCallback(async () => {
-        const dir = await prompt({
-            title: 'Open folder',
-            label: 'Absolute path',
-            defaultValue: state.cwd,
-            placeholder: 'C:\\path\\to\\project',
-            helperText: 'Open any directory as an editable workspace.',
-            confirmText: 'Open',
-        });
-        if (!dir) return;
+    const [folderPickerOpen, setFolderPickerOpen] = useState(false);
+
+    const openFolder = useCallback(async (dir: string) => {
         if (!(await guardDirty())) return;
         try {
             await api.files({ root: dir }); // validate it exists/readable
@@ -118,7 +112,7 @@ export function App() {
         } catch (e) {
             notify((e as Error).message, 'error');
         }
-    }, [prompt, state.cwd, notify, openWorkspace, guardDirty]);
+    }, [notify, openWorkspace, guardDirty]);
 
     // Restore the last opened workspace across reloads/restarts.
     useEffect(() => {
@@ -178,7 +172,7 @@ export function App() {
                     <Button size="small" startIcon={<AddIcon />} variant="outlined" onClick={() => setCreateOpen(true)} sx={{ mr: 1 }}>
                         New template
                     </Button>
-                    <Button size="small" startIcon={<FolderOpenIcon />} onClick={openFolder} sx={{ color: 'text.primary' }}>
+                    <Button size="small" startIcon={<FolderOpenIcon />} onClick={() => setFolderPickerOpen(true)} sx={{ color: 'text.primary' }}>
                         Open folder…
                     </Button>
                     <Tooltip title="Guide">
@@ -208,7 +202,6 @@ export function App() {
                                         <Stack direction="row" spacing={1} alignItems="center">
                                             <span>{t.name}</span>
                                             <Chip size="small" label={`v${t.version}`} variant="outlined" sx={{ height: 18, fontSize: 10 }} />
-                                            <Chip size="small" label={t.output} variant="outlined" color={t.output === 'merge' ? 'warning' : 'secondary'} sx={{ height: 18, fontSize: 10 }} />
                                         </Stack>
                                     }
                                     secondary={`${t.variables.length} var · ${t.features.length} feat`}
@@ -295,6 +288,14 @@ export function App() {
             />
 
             <ExportDialog open={exportOpen} templateName={template?.name ?? null} onClose={() => setExportOpen(false)} notify={notify} />
+
+            <FolderPickerDialog
+                open={folderPickerOpen}
+                title="Open folder as workspace"
+                initialPath={workspace ?? state.cwd}
+                onClose={() => setFolderPickerOpen(false)}
+                onSelect={openFolder}
+            />
 
             <GuideDialog open={guideOpen} onClose={() => setGuideOpen(false)} onNewTemplate={() => setCreateOpen(true)} />
 

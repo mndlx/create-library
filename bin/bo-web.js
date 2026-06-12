@@ -190,6 +190,7 @@ async function handleApi(req, res, pathname, query) {
         const into = path.resolve(body.into || process.cwd());
         const includeManifest = !!body.includeManifest;
         if (mode === 'merge') {
+            fs.mkdirSync(into, { recursive: true }); // merging into a fresh folder is fine
             const { tokens, report } = (0, engine_1.mergeInto)({ template: t, projectDir: into, answers, features, force: !!body.force, includeManifest });
             return sendJson(res, 200, { ok: true, mode, into, report, nextSteps: (0, engine_1.renderNextSteps)(t, tokens) });
         }
@@ -367,6 +368,43 @@ async function handleApi(req, res, pathname, query) {
     if (req.method === 'POST' && pathname === '/api/validate') {
         const t = requireTemplate(body.templateName);
         return sendJson(res, 200, { ok: true, errors: (0, engine_1.validateManifest)((0, engine_1.readRawManifest)(t.dir)) });
+    }
+    // Directory browser for folder pickers: list subdirectories of a path.
+    if (req.method === 'GET' && pathname === '/api/fs/dirs') {
+        const raw = (query.path || '').trim();
+        if (!raw) {
+            // Roots: drive letters on Windows, '/' elsewhere.
+            if (process.platform === 'win32') {
+                const drives = [];
+                for (let c = 65; c <= 90; c++) {
+                    const d = String.fromCharCode(c) + ':\\';
+                    try {
+                        if (fs.existsSync(d))
+                            drives.push(d);
+                    }
+                    catch { /* skip */ }
+                }
+                return sendJson(res, 200, { ok: true, path: '', parent: null, dirs: drives, roots: true });
+            }
+            return sendJson(res, 200, { ok: true, path: '', parent: null, dirs: ['/'], roots: true });
+        }
+        const dir = path.resolve(raw);
+        if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory())
+            throw new Error(`Not a directory: ${dir}`);
+        const dirs = fs
+            .readdirSync(dir, { withFileTypes: true })
+            .filter((e) => e.isDirectory() && !e.name.startsWith('.') && e.name !== 'node_modules')
+            .map((e) => e.name)
+            .sort((a, b) => a.localeCompare(b));
+        const parent = path.dirname(dir);
+        return sendJson(res, 200, { ok: true, path: dir, parent: parent === dir ? '' : parent, dirs, roots: false });
+    }
+    if (req.method === 'POST' && pathname === '/api/fs/mkdir') {
+        const dir = path.resolve(String(body.path || ''));
+        if (!dir)
+            throw new Error('A path is required');
+        fs.mkdirSync(dir, { recursive: true });
+        return sendJson(res, 200, { ok: true, dir });
     }
     // ---- File explorer / editor APIs (operate inside a template's directory) ----
     if (req.method === 'GET' && pathname === '/api/files') {

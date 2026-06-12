@@ -15,8 +15,9 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useCallback, useEffect, useState } from 'react';
-import { api, type AppState, type OutputMode, type PublishedVersion, type Template } from '../api';
+import { api, type AppState, type PublishedVersion, type Template } from '../api';
 import { useDialogs } from './dialogs';
+import { FolderField } from './FolderPicker';
 import { VariablesPanel } from './VariablesPanel';
 
 type Notify = (msg: string, sev?: 'success' | 'error' | 'info') => void;
@@ -34,19 +35,18 @@ function TemplateSection({ template, notify, reload }: SectionProps) {
     const [title, setTitle] = useState(template.title);
     const [description, setDescription] = useState(template.description);
     const [version, setVersion] = useState(template.version);
-    const [output, setOutput] = useState<OutputMode>(template.output);
 
     useEffect(() => {
         setTitle(template.title); setDescription(template.description);
-        setVersion(template.version); setOutput(template.output);
+        setVersion(template.version);
     }, [template]);
 
     const dirty = title !== template.title || description !== template.description
-        || version !== template.version || output !== template.output;
+        || version !== template.version;
 
     const save = async () => {
         try {
-            await api.setMeta({ templateName: template.name, title, description, version, output });
+            await api.setMeta({ templateName: template.name, title, description, version });
             notify('Template settings saved', 'success');
             reload();
         } catch (e) { notify((e as Error).message, 'error'); }
@@ -63,13 +63,7 @@ function TemplateSection({ template, notify, reload }: SectionProps) {
         <Stack spacing={1.5}>
             <TextField size="small" label="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
             <TextField size="small" label="Description" multiline maxRows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
-            <Stack direction="row" spacing={1}>
-                <TextField size="small" label="Version" value={version} onChange={(e) => setVersion(e.target.value)} sx={{ width: 110 }} />
-                <TextField select size="small" label="Output" value={output} onChange={(e) => setOutput(e.target.value as OutputMode)} sx={{ flex: 1 }}>
-                    <MenuItem value="new">new — creates a folder</MenuItem>
-                    <MenuItem value="merge">merge — into existing project</MenuItem>
-                </TextField>
-            </Stack>
+            <TextField size="small" label="Version" value={version} onChange={(e) => setVersion(e.target.value)} sx={{ width: 130 }} />
             <Stack direction="row" spacing={1}>
                 <Button size="small" variant="contained" disabled={!dirty} onClick={save}>Save settings</Button>
                 <Button size="small" variant="outlined" onClick={validate}>Validate</Button>
@@ -154,7 +148,6 @@ function GenerateSection({ template, state, notify, onResult }: SectionProps & {
     const { prompt } = useDialogs();
     const [answers, setAnswers] = useState<Record<string, string>>({});
     const [features, setFeatures] = useState<Record<string, boolean | string>>({});
-    const [mode, setMode] = useState<OutputMode>(template.output);
     const [into, setInto] = useState('');
     const [force, setForce] = useState(false);
     const [includeManifest, setIncludeManifest] = useState(false);
@@ -162,13 +155,13 @@ function GenerateSection({ template, state, notify, onResult }: SectionProps & {
     useEffect(() => {
         setAnswers(Object.fromEntries(template.variables.map((v) => [v.name, v.default ?? ''])));
         setFeatures(Object.fromEntries(template.features.map((f) => [f.id, f.default ?? (f.type === 'boolean' ? false : '')])));
-        setMode(template.output);
         setInto(''); setForce(false); setIncludeManifest(false);
     }, [template]);
 
     const generate = async () => {
         try {
-            const r = await api.generate({ templateName: template.name, answers, features, mode, into: into || undefined, force, includeManifest });
+            // Generation always merges into the target folder (created if missing).
+            const r = await api.generate({ templateName: template.name, answers, features, mode: 'merge', into: into || undefined, force, includeManifest });
             onResult(r);
             notify('Generated', 'success');
         } catch (e) { notify((e as Error).message, 'error'); }
@@ -221,17 +214,16 @@ function GenerateSection({ template, state, notify, onResult }: SectionProps & {
             ))}
 
             <Divider />
-            <TextField select size="small" label="Mode" value={mode} onChange={(e) => setMode(e.target.value as OutputMode)}>
-                <MenuItem value="new">new — create folder</MenuItem>
-                <MenuItem value="merge">merge — into existing project</MenuItem>
-            </TextField>
-            <TextField size="small" label="Target directory" placeholder={state.cwd} value={into} onChange={(e) => setInto(e.target.value)} />
-            {mode === 'merge' && (
-                <FormControlLabel control={<Checkbox size="small" checked={force} onChange={(e) => setForce(e.target.checked)} />}
-                    label={<Typography variant="body2">Force overwrite</Typography>} />
-            )}
+            <FolderField
+                label="Target folder" value={into} onChange={setInto}
+                placeholder={state.cwd}
+                helperText="Content is merged here (folder is created if missing; existing files kept)."
+                pickerTitle="Target folder"
+            />
+            <FormControlLabel control={<Checkbox size="small" checked={force} onChange={(e) => setForce(e.target.checked)} />}
+                label={<Typography variant="body2">Overwrite existing files</Typography>} />
             <FormControlLabel control={<Checkbox size="small" checked={includeManifest} onChange={(e) => setIncludeManifest(e.target.checked)} />}
-                label={<Typography variant="body2">Include manifest files in output</Typography>} />
+                label={<Typography variant="body2">Include template meta files (template.json, features/)</Typography>} />
             <Stack direction="row" spacing={1}>
                 <Button variant="contained" startIcon={<RocketLaunchIcon />} onClick={generate}>Generate</Button>
                 <Button variant="outlined" onClick={savePreset}>Save preset…</Button>
@@ -308,7 +300,6 @@ export function RightPanel({ template, state, notify, reload, onResult }: PanelP
                 <Stack direction="row" spacing={1} alignItems="center">
                     <Typography variant="subtitle2" noWrap sx={{ flex: 1 }} title={template.name}>{template.title || template.name}</Typography>
                     <Chip size="small" label={`v${template.version}`} variant="outlined" sx={{ height: 20 }} />
-                    <Chip size="small" label={template.output} variant="outlined" color={template.output === 'merge' ? 'warning' : 'secondary'} sx={{ height: 20 }} />
                 </Stack>
             </Box>
             <Box sx={{ flex: 1, overflow: 'auto' }}>

@@ -38,13 +38,21 @@ const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const fsx_1 = require("./fsx");
 const tokens_1 = require("./tokens");
-/** Replace every `<start>TOKEN<end>` occurrence (literal, no regex) with its value. */
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/**
+ * Replace every `<start>TOKEN<end>` occurrence with its value in a SINGLE pass.
+ * Single-pass matters with mixed/nested boilerplates: a substituted value that
+ * itself contains token-like text must never be re-scanned and replaced again
+ * (the old sequential split/join did exactly that).
+ */
 const tokenReplace = (input, tokens, cfg = tokens_1.DEFAULT_TOKEN_CONFIG) => {
-    let out = input;
-    for (const [token, value] of Object.entries(tokens)) {
-        out = out.split(`${cfg.start}${token}${cfg.end}`).join(value);
-    }
-    return out;
+    const names = Object.keys(tokens);
+    if (!names.length)
+        return input;
+    const pattern = escapeRe(cfg.start) +
+        '(' + names.sort((a, b) => b.length - a.length).map(escapeRe).join('|') + ')' +
+        escapeRe(cfg.end);
+    return input.replace(new RegExp(pattern, 'g'), (whole, name) => tokens[name] ?? whole);
 };
 exports.tokenReplace = tokenReplace;
 /** Replace tokens across every text file under `root`. */

@@ -111,12 +111,10 @@ export function GuideDialog({ open, onClose, onNewTemplate }: Props) {
             <DialogTitle>How to use the back-office</DialogTitle>
             <DialogContent dividers>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    A <b>template</b> is a folder of files you can reuse. The engine copies those files into a new
-                    project (<Chip size="small" label="new" color="secondary" variant="outlined" sx={{ height: 18 }} />)
-                    or merges them into an existing one (<Chip size="small" label="merge" color="warning" variant="outlined" sx={{ height: 18 }} />),
-                    replacing <b>dynamic tokens</b> like <code>@@name@@</code> with answers you give at generation time.
-                    The delimiters (<code>@@</code>…<code>@@</code> by default) are configurable per template in
-                    the <b>Variables</b> section of the right panel.
+                    A <b>template</b> is a folder of files you can reuse. Generating <b>merges</b> its content into a
+                    target folder (created if missing, existing files kept), replacing <b>dynamic tokens</b> like
+                    {' '}<code>@@name@@</code> with the values you provide. The delimiters (<code>@@</code>…<code>@@</code>
+                    {' '}by default) come from <code>tokenConfig</code> in <code>template.json</code>.
                 </Typography>
 
                 <Divider sx={{ my: 2 }} />
@@ -124,8 +122,8 @@ export function GuideDialog({ open, onClose, onNewTemplate }: Props) {
 
                 <Step n={1} title="Create the template">
                     <Typography variant="body2">
-                        Click <b>New template</b> (top bar). Name it <code>todo-component</code>, set <b>Output mode</b> to
-                        <b> merge</b> (it adds files into an existing app). Create.
+                        Click <b>New template</b> (top bar). Choose <b>Blank</b> (or <b>Import a folder</b> to start
+                        from an existing project), name it <code>todo-component</code>, pick where to create it. Create.
                     </Typography>
                     <Button size="small" variant="outlined" onClick={() => { onClose(); onNewTemplate(); }} sx={{ mt: 1 }}>
                         New template…
@@ -156,13 +154,13 @@ export function GuideDialog({ open, onClose, onNewTemplate }: Props) {
                     </Typography>
                 </Step>
 
-                <Step n={4} title="Export into your app">
+                <Step n={4} title="Generate into your app">
                     <Typography variant="body2">
-                        Open the <b>Export</b> section in the right panel. Fill the variables —
-                        {' '}<code>COMPONENT = Todo</code>, <code>TITLE = My tasks</code> — set <b>Mode</b> = <b>merge</b>
-                        {' '}and <b>Target directory</b> to your React project. Click <b>Export</b>: every
+                        Open <b>Generate to folder</b> in the right panel. Fill the variables —
+                        {' '}<code>COMPONENT = Todo</code>, <code>TITLE = My tasks</code> — and pick your React project
+                        as <b>Target folder</b> (browse with the folder icon). Click <b>Generate</b>: every
                         {' '}<code>@@COMPONENT@@</code> becomes <code>Todo</code> (in the file names and code) and
-                        {' '}<code>@@TITLE@@</code> becomes <code>My tasks</code>, written under <code>src/components/Todo/</code>.
+                        {' '}<code>@@TITLE@@</code> becomes <code>My tasks</code>, merged under <code>src/components/Todo/</code>.
                     </Typography>
                 </Step>
 
@@ -180,7 +178,7 @@ export function GuideDialog({ open, onClose, onNewTemplate }: Props) {
                         <li><b>Right panel</b> — template settings, variables (auto-detected, auto-saved), generate to folder, publish.</li>
                         <li><b>Publish</b> — versioned snapshot (placeholders intact) to the local registry; used by the CLI and by Export.</li>
                         <li><b>Export</b> (top bar) — fill the variables of the <i>published</i> version and download the result as a zip, placeholders replaced.</li>
-                        <li><b>Generate to folder</b> (right panel) — same replacement, written to a directory or merged into an existing project.</li>
+                        <li><b>Generate to folder</b> (right panel) — same replacement, merged into the target folder (created if missing).</li>
                         <li><b>Open folder…</b> — edit any directory directly, no manifest needed.</li>
                         <li><b>Payload layout</b> — a template can keep files in a <code>template/</code> subfolder, or flat at its root. For flat templates the <code>template.json</code> is left out of the output unless you tick “Include manifest files” in Export.</li>
                     </ul>
