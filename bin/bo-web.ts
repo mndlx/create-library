@@ -118,6 +118,23 @@ const buildTree = (baseDir: string, dir: string): FileNode[] => {
     return nodes;
 };
 
+/**
+ * Move `from` onto an existing `to`: same-name directories merge recursively,
+ * conflicting files are replaced by the incoming ones.
+ */
+const moveMerge = (from: string, to: string): void => {
+    if (fs.existsSync(to) && fs.statSync(from).isDirectory() && fs.statSync(to).isDirectory()) {
+        for (const entry of fs.readdirSync(from)) {
+            moveMerge(path.join(from, entry), path.join(to, entry));
+        }
+        fs.rmdirSync(from);
+        return;
+    }
+    fs.rmSync(to, { recursive: true, force: true });
+    fs.mkdirSync(path.dirname(to), { recursive: true });
+    fs.renameSync(from, to);
+};
+
 const isProbablyBinary = (buf: Buffer): boolean => {
     const len = Math.min(buf.length, 8000);
     for (let i = 0; i < len; i++) if (buf[i] === 0) return true;
@@ -476,7 +493,16 @@ async function handleApi(
     if (req.method === 'POST' && pathname === '/api/file/create') {
         const base = resolveBase({ template: body.templateName, root: body.root });
         const full = safeJoin(base, body.path || '');
-        if (fs.existsSync(full)) throw new Error('Already exists');
+        if (fs.existsSync(full)) {
+            const isDir = fs.statSync(full).isDirectory();
+            // A folder that already exists can never be "overwritten" by a new one;
+            // a file can, but only with the explicit overwrite flag.
+            if (body.dir || isDir || !body.overwrite) {
+                throw new Error(isDir ? 'A folder with this name already exists here' : 'A file with this name already exists here');
+            }
+            fs.writeFileSync(full, String(body.content ?? ''));
+            return sendJson(res, 200, { ok: true, overwritten: true });
+        }
         if (body.dir) {
             fs.mkdirSync(full, { recursive: true });
         } else {
@@ -499,7 +525,11 @@ async function handleApi(
         const from = safeJoin(base, body.from || '');
         const to = safeJoin(base, body.to || '');
         if (!fs.existsSync(from)) throw new Error('Source not found');
-        if (fs.existsSync(to)) throw new Error('Target already exists');
+        if (fs.existsSync(to)) {
+            if (!body.overwrite) throw new Error('Target already exists');
+            moveMerge(from, to);
+            return sendJson(res, 200, { ok: true, merged: true });
+        }
         fs.mkdirSync(path.dirname(to), { recursive: true });
         fs.renameSync(from, to);
         return sendJson(res, 200, { ok: true });

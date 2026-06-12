@@ -180,7 +180,28 @@ export function EditorView({ target, targetKey, notify, onDirtyChange }: Props) 
             await loadTree();
             if (!asDir) openFile({ name: name.split('/').pop()!, path: full, type: 'file' });
         } catch (e) {
-            notify((e as Error).message, 'error');
+            const msg = (e as Error).message;
+            // An existing FILE can be overwritten after explicit confirmation;
+            // an existing folder can't be duplicated, full stop.
+            if (!asDir && /file with this name already exists/i.test(msg)) {
+                const ok = await confirm({
+                    title: 'File already exists',
+                    message: `“${full}” already exists. Overwrite it with an empty file?`,
+                    confirmText: 'Overwrite',
+                    danger: true,
+                });
+                if (!ok) return;
+                try {
+                    await api.createFile(tgt, { path: full, overwrite: true });
+                    closeTab(full); // stale content, if open
+                    await loadTree();
+                    openFile({ name: name.split('/').pop()!, path: full, type: 'file' });
+                } catch (e2) {
+                    notify((e2 as Error).message, 'error');
+                }
+                return;
+            }
+            notify(msg, 'error');
         }
     };
 
@@ -231,8 +252,8 @@ export function EditorView({ target, targetKey, notify, onDirtyChange }: Props) 
             return;
         }
         const to = destDir ? `${destDir}/${base}` : base;
-        try {
-            await api.renameFile(tgt, { from: src, to });
+
+        const finalize = async () => {
             // Re-point any open tab whose path moved.
             setTabs((ts) => ts.map((t) =>
                 t.path === src || t.path.startsWith(src + '/')
@@ -241,9 +262,32 @@ export function EditorView({ target, targetKey, notify, onDirtyChange }: Props) 
             ));
             setActive((a) => (a && (a === src || a.startsWith(src + '/')) ? to + a.slice(src.length) : a));
             await loadTree();
+        };
+
+        try {
+            await api.renameFile(tgt, { from: src, to });
+            await finalize();
             notify('Moved', 'success');
         } catch (e) {
-            notify((e as Error).message, 'error');
+            const msg = (e as Error).message;
+            if (/target already exists/i.test(msg)) {
+                const ok = await confirm({
+                    title: 'Destination already exists',
+                    message: `“${to}” already exists. Merge the contents and overwrite conflicting files with the ones you are moving?`,
+                    confirmText: 'Merge & overwrite',
+                    danger: true,
+                });
+                if (!ok) return;
+                try {
+                    await api.renameFile(tgt, { from: src, to, overwrite: true });
+                    await finalize();
+                    notify('Merged', 'success');
+                } catch (e2) {
+                    notify((e2 as Error).message, 'error');
+                }
+                return;
+            }
+            notify(msg, 'error');
         }
     };
 

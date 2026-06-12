@@ -151,10 +151,10 @@ export const api = {
         req<{ binary: boolean; content: string }>('/api/file?' + targetQs(t) + '&' + qs({ path })),
     saveFile: (t: FileTarget, p: { path: string; content: string }) =>
         req<{ ok: true }>('/api/file/save', { ...targetBody(t), ...p }),
-    createFile: (t: FileTarget, p: { path: string; dir?: boolean }) =>
+    createFile: (t: FileTarget, p: { path: string; dir?: boolean; overwrite?: boolean }) =>
         req<{ ok: true }>('/api/file/create', { ...targetBody(t), ...p }),
     deleteFile: (t: FileTarget, p: { path: string }) =>
         req<{ ok: true }>('/api/file/delete', { ...targetBody(t), ...p }),
-    renameFile: (t: FileTarget, p: { from: string; to: string }) =>
+    renameFile: (t: FileTarget, p: { from: string; to: string; overwrite?: boolean }) =>
         req<{ ok: true }>('/api/file/rename', { ...targetBody(t), ...p }),
 };
