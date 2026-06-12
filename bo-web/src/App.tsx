@@ -19,6 +19,8 @@ import IconButton from '@mui/material/IconButton';
 import List from '@mui/material/List';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
+import Menu from '@mui/material/Menu';
+import MenuItem from '@mui/material/MenuItem';
 import Snackbar from '@mui/material/Snackbar';
 import Stack from '@mui/material/Stack';
 import Toolbar from '@mui/material/Toolbar';
@@ -47,7 +49,10 @@ export function App() {
     const [createOpen, setCreateOpen] = useState(false);
     const [exportOpen, setExportOpen] = useState(false);
     const [guideOpen, setGuideOpen] = useState(false);
+    const [tplMenu, setTplMenu] = useState<{ x: number; y: number; name: string } | null>(null);
     const dirtyRef = useRef(0);
+    // reload is defined below; the menu handlers above it go through this ref.
+    const reloadRef = useRef<() => Promise<void>>(async () => undefined);
 
     // Show the guide automatically on the first visit.
     useEffect(() => {
@@ -61,8 +66,36 @@ export function App() {
         }
     }, []);
 
-    const { confirm } = useDialogs();
+    const { confirm, prompt } = useDialogs();
     const notify = useCallback((msg: string, sev: Severity = 'info') => setSnack({ msg, sev }), []);
+
+    const renameTemplate = async (name: string) => {
+        setTplMenu(null);
+        const newName = await prompt({ title: `Rename "${name}"`, label: 'New name', defaultValue: name, confirmText: 'Rename' });
+        if (!newName || newName === name) return;
+        try {
+            const r = await api.renameTemplate({ templateName: name, newName: newName.trim() });
+            notify(`Renamed to "${r.name}"`, 'success');
+            await reloadRef.current();
+            setSelected(r.name);
+        } catch (e) { notify((e as Error).message, 'error'); }
+    };
+
+    const deleteTemplate = async (name: string) => {
+        setTplMenu(null);
+        const ok = await confirm({
+            title: 'Delete template',
+            message: `Delete "${name}" and all its files from disk? Published versions in the registry are removed too. This cannot be undone.`,
+            confirmText: 'Delete template',
+            danger: true,
+        });
+        if (!ok) return;
+        try {
+            await api.deleteTemplate({ templateName: name, deletePublished: true });
+            notify(`Deleted "${name}"`, 'info');
+            reloadRef.current();
+        } catch (e) { notify((e as Error).message, 'error'); }
+    };
 
     /** Block navigation away from unsaved editor changes unless confirmed. */
     const guardDirty = useCallback(async (): Promise<boolean> => {
@@ -134,6 +167,7 @@ export function App() {
         }
     }, [notify]);
 
+    useEffect(() => { reloadRef.current = reload; }, [reload]);
     useEffect(() => { reload(); }, [reload]);
 
     const registerWorkspace = useCallback(async () => {
@@ -196,7 +230,11 @@ export function App() {
                     <Divider />
                     <List dense sx={{ overflow: 'auto', flex: 1 }}>
                         {state.templates.map((t) => (
-                            <ListItemButton key={t.name} selected={!workspace && t.name === selected} onClick={() => selectTemplate(t.name)}>
+                            <ListItemButton
+                                key={t.name} selected={!workspace && t.name === selected}
+                                onClick={() => selectTemplate(t.name)}
+                                onContextMenu={(e) => { e.preventDefault(); setTplMenu({ x: e.clientX, y: e.clientY, name: t.name }); }}
+                            >
                                 <ListItemText
                                     primary={
                                         <Stack direction="row" spacing={1} alignItems="center">
@@ -299,6 +337,16 @@ export function App() {
                 onClose={() => setFolderPickerOpen(false)}
                 onSelect={openFolder}
             />
+
+            <Menu
+                open={!!tplMenu}
+                onClose={() => setTplMenu(null)}
+                anchorReference="anchorPosition"
+                anchorPosition={tplMenu ? { top: tplMenu.y, left: tplMenu.x } : undefined}
+            >
+                <MenuItem onClick={() => tplMenu && renameTemplate(tplMenu.name)}>Rename…</MenuItem>
+                <MenuItem onClick={() => tplMenu && deleteTemplate(tplMenu.name)} sx={{ color: 'error.main' }}>Delete…</MenuItem>
+            </Menu>
 
             <GuideDialog open={guideOpen} onClose={() => setGuideOpen(false)} onNewTemplate={() => setCreateOpen(true)} />
 

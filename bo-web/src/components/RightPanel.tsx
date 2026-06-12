@@ -331,7 +331,7 @@ export function RightPanel({ template, state, notify, reload, onResult, onRename
                 </Stack>
             </Box>
             <Box sx={{ flex: 1, overflow: 'auto' }}>
-                <Section title="Template settings">
+                <Section title="Template settings" defaultExpanded>
                     <TemplateSection template={template} state={state} notify={notify} reload={reload} onRenamed={onRenamed} />
                 </Section>
                 <Divider />
