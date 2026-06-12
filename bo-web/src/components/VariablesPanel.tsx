@@ -132,7 +132,7 @@ export function VariablesPanel({ template, notify, reload }: Props) {
     const addVariable = async () => {
         const token = newToken.trim();
         if (!token) return notify('Token name required', 'error');
-        if (!/^[A-Za-z0-9_]+$/.test(token)) return notify('Use only letters, numbers, underscore', 'error');
+        if (!/^[A-Za-z0-9_.-]+$/.test(token)) return notify('Use only letters, numbers, underscore, dot, dash', 'error');
         if (template.variables.some((v) => v.token === token)) return notify('Token already exists', 'error');
         try {
             await api.setVariable({

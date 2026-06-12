@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { isProbablyBinary, walkFiles } from './fsx';
+import { MANIFEST_FILENAME } from './manifest';
 import { LoadedTemplate, PromptDef, TokenConfig } from './types';
 
 /** Legacy default delimiters, used when a manifest has no explicit tokenConfig. */
@@ -11,21 +12,15 @@ export const tokenConfigOf = (template: LoadedTemplate): TokenConfig =>
 
 const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-/** Build the regex matching `<start>NAME<end>`; NAME is a token-name identifier. */
+/**
+ * Build the regex matching `<start>NAME<end>`. NAME allows dots and dashes so
+ * tokens like `@@test.js@@` or `@@my-var@@` work.
+ */
 const tokenRegex = ({ start, end }: TokenConfig): RegExp =>
-    new RegExp(`${escapeRe(start)}([A-Za-z0-9_]+)${escapeRe(end)}`, 'g');
+    new RegExp(`${escapeRe(start)}([A-Za-z0-9_.\\-]+)${escapeRe(end)}`, 'g');
 
-/** Directories scanned for tokens: the payload plus any feature overlays. */
-const scanDirs = (template: LoadedTemplate): string[] => {
-    const dirs = [template.sourceDir];
-    for (const f of template.manifest.features ?? []) {
-        if (f.overlay) dirs.push(path.join(template.dir, f.overlay));
-        for (const v of Object.values(f.variants ?? {})) {
-            if (v.overlay) dirs.push(path.join(template.dir, v.overlay));
-        }
-    }
-    return dirs;
-};
+/** Token names accepted when declaring a variable by hand. */
+export const TOKEN_NAME_RE = /^[A-Za-z0-9_.-]+$/;
 
 /** Scan a template's files (contents and path names) for tokens wrapped in `cfg`. */
 const scanForTokens = (template: LoadedTemplate, cfg: TokenConfig): string[] => {
@@ -36,12 +31,15 @@ const scanForTokens = (template: LoadedTemplate, cfg: TokenConfig): string[] => 
         while ((m = re.exec(text))) found.add(m[1]);
     };
 
-    for (const dir of scanDirs(template)) {
-        if (!fs.existsSync(dir)) continue;
-        for (const file of walkFiles(dir)) {
-            collect(path.relative(dir, file)); // tokens in file/dir names
-            if (!isProbablyBinary(file)) collect(fs.readFileSync(file, 'utf8'));
-        }
+    // Scan the WHOLE template folder — payload, overlays, and any file the
+    // editor shows — so tokens never hide because the payload subfolder is
+    // missing or files live outside it. Only the manifest itself is skipped.
+    const manifestPath = path.join(template.dir, MANIFEST_FILENAME);
+    if (!fs.existsSync(template.dir)) return [];
+    for (const file of walkFiles(template.dir)) {
+        if (path.resolve(file) === path.resolve(manifestPath)) continue;
+        collect(path.relative(template.dir, file)); // tokens in file/dir names
+        if (!isProbablyBinary(file)) collect(fs.readFileSync(file, 'utf8'));
     }
     return [...found].sort();
 };

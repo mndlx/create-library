@@ -46,11 +46,14 @@ export const assemble = (
 ): Record<string, string> => {
     const effects = resolveEffects(template, features);
 
-    copyDir(template.sourceDir, stagingDir);
+    // If the configured payload subfolder doesn't exist (files were authored
+    // directly in the template root), fall back to the root as the payload.
+    const payloadRoot = fs.existsSync(template.sourceDir) ? template.sourceDir : template.dir;
+    copyDir(payloadRoot, stagingDir);
 
     // When the payload is the template root (no `template/` subfolder), the
     // authoring files were copied too — drop them unless the caller opts in.
-    const payloadIsRoot = path.resolve(template.sourceDir) === path.resolve(template.dir);
+    const payloadIsRoot = path.resolve(payloadRoot) === path.resolve(template.dir);
     if (payloadIsRoot && !includeManifest) {
         for (const entry of PROPRIETARY_ENTRIES) {
             fs.rmSync(path.join(stagingDir, entry), { recursive: true, force: true });
