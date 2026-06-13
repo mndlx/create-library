@@ -76,19 +76,17 @@ function TemplateSection({ template, notify, reload, onRenamed }: SectionProps &
 
     return (
         <Section title="Template settings">
-            <StackedField label="Name" hint={name !== template.name ? 'Renames the manifest and the template folder.' : undefined}>
-                <PanelInput fullWidth value={name} onChange={(e) => setName(e.target.value)} />
-            </StackedField>
-            <StackedField label="Title"><PanelInput fullWidth value={title} onChange={(e) => setTitle(e.target.value)} /></StackedField>
-            <StackedField label="Description"><PanelInput fullWidth multiline maxRows={3} value={description} onChange={(e) => setDescription(e.target.value)} /></StackedField>
-            <Field label="Version" control={<PanelInput value={version} onChange={(e) => setVersion(e.target.value)} sx={{ width: 110 }} />} />
-            <Stack direction="row" spacing={1} sx={{ pt: 0.5 }}>
+            <Field label="Name" hint={name !== template.name ? 'renames folder' : undefined} control={<PanelInput fullWidth value={name} onChange={(e) => setName(e.target.value)} />} />
+            <Field label="Title" control={<PanelInput fullWidth value={title} onChange={(e) => setTitle(e.target.value)} />} />
+            <Field label="Description" align="start" control={<PanelInput fullWidth multiline maxRows={4} value={description} onChange={(e) => setDescription(e.target.value)} />} />
+            <Field label="Version" control={<PanelInput value={version} onChange={(e) => setVersion(e.target.value)} sx={{ width: 96 }} />} />
+            <Stack direction="row" spacing={0.75} sx={{ pt: 0.5 }}>
                 <Button size="small" variant="contained" disabled={!dirty} onClick={save}>Save</Button>
                 <Button size="small" variant="outlined" onClick={validate}>Validate</Button>
                 <Box sx={{ flex: 1 }} />
                 <Button size="small" color="error" variant="outlined" onClick={del}>Delete…</Button>
             </Stack>
-            <Typography variant="caption" color="text.secondary" sx={{ wordBreak: 'break-all', fontFamily: 'ui-monospace, monospace', fontSize: 10.5 }}>{template.dir}</Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ wordBreak: 'break-all', fontFamily: 'ui-monospace, monospace', fontSize: 10 }}>{template.dir}</Typography>
         </Section>
     );
 }
@@ -144,21 +142,23 @@ function GenerateSection({ template, state, notify, onResult }: SectionProps & {
             description={<>Replaces every {tk('token')} with the values below and merges the result into the target folder (created if missing, existing files kept). For a downloadable zip of the published version, use Export in the top bar.</>}
         >
             {template.variables.length > 0 && (
-                <Typography variant="overline" color="text.secondary" sx={{ fontSize: 10 }}>Variable values</Typography>
+                <Typography variant="overline" color="text.secondary" sx={{ fontSize: 9.5 }}>Variable values</Typography>
             )}
             {template.variables.map((v) => (
-                <StackedField key={v.name} label={<>{v.message} <Box component="span" sx={{ fontFamily: 'ui-monospace, monospace', color: 'secondary.main' }}>{tk(v.token)}</Box></>}>
-                    {v.type === 'select' ? (
-                        <PanelSelect fullWidth value={answers[v.name] ?? ''} onChange={(val) => setAnswers((a) => ({ ...a, [v.name]: val }))}
-                            options={(v.options ?? []).map((o) => ({ value: o }))} />
-                    ) : (
-                        <PanelInput fullWidth value={answers[v.name] ?? ''} onChange={(e) => setAnswers((a) => ({ ...a, [v.name]: e.target.value }))} />
-                    )}
-                </StackedField>
+                <Field key={v.name} label={<Box component="span" sx={{ fontFamily: 'ui-monospace, monospace', color: 'secondary.main' }}>{tk(v.token)}</Box>}
+                    control={
+                        v.type === 'select' ? (
+                            <PanelSelect fullWidth value={answers[v.name] ?? ''} onChange={(val) => setAnswers((a) => ({ ...a, [v.name]: val }))}
+                                options={(v.options ?? []).map((o) => ({ value: o }))} />
+                        ) : (
+                            <PanelInput fullWidth value={answers[v.name] ?? ''} placeholder={v.message}
+                                onChange={(e) => setAnswers((a) => ({ ...a, [v.name]: e.target.value }))} />
+                        )
+                    } />
             ))}
 
             {template.features.length > 0 && (
-                <Typography variant="overline" color="text.secondary" sx={{ fontSize: 10, mt: 0.5 }}>Features</Typography>
+                <Typography variant="overline" color="text.secondary" sx={{ fontSize: 9.5, mt: 0.5 }}>Features</Typography>
             )}
             {template.features.map((f) => (
                 f.type === 'select' ? (

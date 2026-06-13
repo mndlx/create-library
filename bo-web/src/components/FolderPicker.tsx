@@ -20,6 +20,7 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useCallback, useEffect, useState } from 'react';
 import { useDialogs } from './dialogs';
+import { PanelInput } from './inspector';
 
 interface BrowseResult {
     path: string;
@@ -132,36 +133,39 @@ export function FolderPickerDialog({ open, title = 'Select folder', initialPath,
 }
 
 interface FieldProps {
-    label: string;
+    label?: string;
     value: string;
     onChange: (v: string) => void;
     placeholder?: string;
     helperText?: string;
     pickerTitle?: string;
+    /** Compact filled style for inspector panels (default true). */
+    compact?: boolean;
 }
 
 /** Text field with a built-in "browse…" folder picker. */
-export function FolderField({ label, value, onChange, placeholder, helperText, pickerTitle }: FieldProps) {
+export function FolderField({ label, value, onChange, placeholder, helperText, pickerTitle, compact = true }: FieldProps) {
     const [open, setOpen] = useState(false);
+    const browse = (
+        <InputAdornment position="end">
+            <Tooltip title="Browse…">
+                <IconButton size="small" edge="end" onClick={() => setOpen(true)}>
+                    <FolderOpenIcon fontSize="small" />
+                </IconButton>
+            </Tooltip>
+        </InputAdornment>
+    );
     return (
         <>
-            <TextField
-                size="small" fullWidth label={label} value={value} placeholder={placeholder} helperText={helperText}
-                onChange={(e) => onChange(e.target.value)}
-                InputProps={{
-                    endAdornment: (
-                        <InputAdornment position="end">
-                            <Tooltip title="Browse…">
-                                <IconButton size="small" edge="end" onClick={() => setOpen(true)}>
-                                    <FolderOpenIcon fontSize="small" />
-                                </IconButton>
-                            </Tooltip>
-                        </InputAdornment>
-                    ),
-                }}
-            />
+            {compact ? (
+                <PanelInput fullWidth value={value} placeholder={placeholder} helperText={helperText}
+                    onChange={(e) => onChange(e.target.value)} InputProps={{ endAdornment: browse }} />
+            ) : (
+                <TextField size="small" fullWidth label={label} value={value} placeholder={placeholder} helperText={helperText}
+                    onChange={(e) => onChange(e.target.value)} InputProps={{ endAdornment: browse }} />
+            )}
             <FolderPickerDialog
-                open={open} title={pickerTitle ?? label} initialPath={value || undefined}
+                open={open} title={pickerTitle ?? label ?? 'Select folder'} initialPath={value || undefined}
                 onClose={() => setOpen(false)} onSelect={onChange}
             />
         </>

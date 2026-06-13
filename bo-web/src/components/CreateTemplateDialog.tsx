@@ -93,7 +93,7 @@ export function CreateTemplateDialog({ open, defaultDir, onClose, notify, onCrea
                     {mode === 'import' && (
                         <FolderField
                             label="Folder to import" value={importFrom} onChange={setImportFrom}
-                            pickerTitle="Folder to import"
+                            pickerTitle="Folder to import" compact={false}
                         />
                     )}
 
@@ -109,7 +109,7 @@ export function CreateTemplateDialog({ open, defaultDir, onClose, notify, onCrea
                         label="Create in" value={rootDir} onChange={setRootDir}
                         placeholder={defaultDir}
                         helperText="Where the template folder is created — registered automatically."
-                        pickerTitle="Create template in"
+                        pickerTitle="Create template in" compact={false}
                     />
 
                     <Link component="button" type="button" variant="caption" underline="hover" sx={{ alignSelf: 'flex-start' }}
