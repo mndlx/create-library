@@ -7,17 +7,13 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
-import Divider from '@mui/material/Divider';
-import FormControlLabel from '@mui/material/FormControlLabel';
 import IconButton from '@mui/material/IconButton';
-import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
-import Switch from '@mui/material/Switch';
-import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useEffect, useState } from 'react';
 import { api, type Template, type Variable } from '../api';
+import { Field, PanelInput, PanelSelect, StackedField, SwitchField } from './inspector';
 
 interface Props {
     template: Template;
@@ -42,7 +38,6 @@ function VariableRow({ template, v, notify, reload }: { template: Template; v: V
     });
     const [state, setState] = useState<SaveState>('idle');
 
-    // Reset when the variable changes identity/content from a re-scan.
     useEffect(() => {
         setForm({ message: v.message, def: v.default, type: v.type, options: (v.options ?? []).join(', '), exposeCli: v.exposeCli });
         setState('idle');
@@ -85,36 +80,37 @@ function VariableRow({ template, v, notify, reload }: { template: Template; v: V
     const tk = `${template.tokenConfig.start}${v.token}${template.tokenConfig.end}`;
 
     return (
-        <Box sx={{ py: 1.5, borderBottom: 1, borderColor: 'divider' }}>
+        <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 2, p: 1.25, bgcolor: 'background.paper' }}>
             <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-                <Typography sx={{ fontFamily: 'ui-monospace, monospace', fontWeight: 600, fontSize: 13 }}>{tk}</Typography>
+                <Typography sx={{ fontFamily: 'ui-monospace, monospace', fontWeight: 700, fontSize: 12.5, color: 'secondary.main' }}>{tk}</Typography>
                 {v.detected
-                    ? <Chip size="small" label="in files" color="secondary" variant="outlined" sx={{ height: 18 }} />
-                    : <Chip size="small" label="not in files" color="warning" variant="outlined" sx={{ height: 18 }} />}
+                    ? <Chip size="small" label="in files" color="secondary" variant="outlined" sx={{ height: 17, fontSize: 10 }} />
+                    : <Chip size="small" label="not in files" color="warning" variant="outlined" sx={{ height: 17, fontSize: 10 }} />}
                 <SaveStatus state={state} />
                 <Box sx={{ flex: 1 }} />
                 <Tooltip title="Remove saved metadata">
                     <IconButton size="small" onClick={remove}><DeleteOutlineIcon fontSize="small" /></IconButton>
                 </Tooltip>
             </Stack>
-            <Stack spacing={1.25}>
-                <TextField size="small" label="Question asked at generation" value={form.message} onChange={(e) => update({ message: e.target.value })} />
+            <Stack spacing={1}>
+                <StackedField label="Question asked at generation">
+                    <PanelInput fullWidth value={form.message} onChange={(e) => update({ message: e.target.value })} />
+                </StackedField>
                 <Stack direction="row" spacing={1}>
-                    <TextField size="small" label="Default" value={form.def} onChange={(e) => update({ def: e.target.value })} sx={{ flex: 1 }} />
-                    <TextField select size="small" label="Type" value={form.type} onChange={(e) => update({ type: e.target.value as Variable['type'] })} sx={{ width: 100 }}>
-                        <MenuItem value="text">text</MenuItem>
-                        <MenuItem value="select">select</MenuItem>
-                    </TextField>
+                    <StackedField label="Default"><PanelInput fullWidth value={form.def} onChange={(e) => update({ def: e.target.value })} /></StackedField>
+                    <Box sx={{ width: 110, flexShrink: 0 }}>
+                        <StackedField label="Type">
+                            <PanelSelect fullWidth value={form.type} onChange={(val) => update({ type: val as Variable['type'] })}
+                                options={[{ value: 'text' }, { value: 'select' }]} />
+                        </StackedField>
+                    </Box>
                 </Stack>
                 {form.type === 'select' && (
-                    <TextField size="small" label="Options (comma-separated)" value={form.options} onChange={(e) => update({ options: e.target.value })} />
+                    <StackedField label="Options (comma-separated)">
+                        <PanelInput fullWidth value={form.options} onChange={(e) => update({ options: e.target.value })} />
+                    </StackedField>
                 )}
-                <Tooltip title="Ask for this token in the CLI (off = its default is used)">
-                    <FormControlLabel
-                        control={<Switch size="small" checked={form.exposeCli} onChange={(e) => update({ exposeCli: e.target.checked })} />}
-                        label={<Typography variant="caption">Expose in CLI</Typography>} sx={{ m: 0 }}
-                    />
-                </Tooltip>
+                <SwitchField label="Expose in CLI" hint="off = its default is used" checked={form.exposeCli} onChange={(c) => update({ exposeCli: c })} />
             </Stack>
         </Box>
     );
@@ -146,26 +142,20 @@ export function VariablesPanel({ template, notify, reload }: Props) {
     };
 
     return (
-        <Box>
-            <Typography variant="caption" color="text.secondary">
-                Write <code>{start}name{end}</code> in any file (content or filename) and it becomes a variable here.
-                Edits save automatically.
-            </Typography>
-
-            <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1.5 }}>
-                <Chip size="small" variant="outlined" label={`delimiters: ${start}…${end}`} sx={{ fontFamily: 'ui-monospace, monospace' }} />
-                <Typography variant="caption" color="text.secondary">from <code>tokenConfig</code> in template.json</Typography>
-                <Box sx={{ flex: 1 }} />
-                <Tooltip title="Re-scan the template files for tokens (after manual edits)">
-                    <Button size="small" startIcon={<SyncIcon />} onClick={reload}>Sync</Button>
-                </Tooltip>
-            </Stack>
+        <>
+            <Field
+                label={<Typography variant="caption" color="text.secondary">Delimiters <Box component="code">{start}…{end}</Box> — from tokenConfig in template.json</Typography>}
+                control={
+                    <Tooltip title="Re-scan the template files for tokens (after manual edits)">
+                        <Button size="small" startIcon={<SyncIcon />} onClick={reload}>Sync</Button>
+                    </Tooltip>
+                }
+            />
 
             {template.foreignTokens.map((f) => (
                 <Alert
                     key={f.config.start + f.config.end}
                     severity="warning"
-                    sx={{ mt: 1.5 }}
                     action={
                         <Button color="inherit" size="small" onClick={() => switchDelimiters(f.config.start, f.config.end)}>
                             Use {f.config.start}…{f.config.end}
@@ -174,30 +164,26 @@ export function VariablesPanel({ template, notify, reload }: Props) {
                 >
                     Found {f.config.start}…{f.config.end}-style tokens ({f.tokens.slice(0, 4).join(', ')}
                     {f.tokens.length > 4 ? `, +${f.tokens.length - 4}` : ''}) but the delimiters are{' '}
-                    {template.tokenConfig.start}…{template.tokenConfig.end} — they won't be replaced. If they're meant
-                    to be variables, switch; otherwise ignore.
+                    {start}…{end} — they won't be replaced.
                 </Alert>
             ))}
 
-            <Divider sx={{ my: 1.5 }} />
-
             {template.variables.length === 0 && (
-                <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
-                    No tokens yet — use <code>{start}name{end}</code> in the editor, or add one below.
+                <Typography variant="body2" color="text.secondary" sx={{ py: 0.5 }}>
+                    No tokens yet — use <Box component="code">{start}name{end}</Box> in the editor, or add one below.
                 </Typography>
             )}
             {template.variables.map((v) => (
                 <VariableRow key={v.token} template={template} v={v} notify={notify} reload={reload} />
             ))}
 
-            <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1.5 }}>
-                <TextField
-                    size="small" label="New token" placeholder="apiUrl" value={newToken} fullWidth
+            <Stack direction="row" spacing={1} alignItems="center">
+                <PanelInput placeholder="new token, e.g. apiUrl" value={newToken} fullWidth
                     onChange={(e) => setNewToken(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') addVariable(); }}
                 />
                 <Button variant="contained" startIcon={<AddIcon />} onClick={addVariable} sx={{ flexShrink: 0 }}>Add</Button>
             </Stack>
-        </Box>
+        </>
     );
 }

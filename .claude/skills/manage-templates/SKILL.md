@@ -39,6 +39,9 @@ from output unless `includeManifest` is set.
 - Always `yarn build` after editing `.ts` under `engine/` or `bin/`; restart the
   server to pick up changes.
 - In the UI, use MUI dialogs — never native `alert/prompt/confirm`.
+- Build any detail/inspector/settings panel with the shared primitives in
+  `bo-web/src/components/inspector.tsx` (see the `panel-ui` skill) — flat
+  `Section`s, `Field`/`SwitchField`/`StackedField`, `PanelInput`/`PanelSelect`.
 - If replacement "doesn't work", verify the configured delimiters match what's
   in the files.
 

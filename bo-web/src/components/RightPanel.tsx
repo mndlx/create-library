@@ -1,23 +1,16 @@
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import PublishIcon from '@mui/icons-material/Publish';
 import RocketLaunchIcon from '@mui/icons-material/RocketLaunch';
-import Accordion from '@mui/material/Accordion';
-import AccordionDetails from '@mui/material/AccordionDetails';
-import AccordionSummary from '@mui/material/AccordionSummary';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import Checkbox from '@mui/material/Checkbox';
 import Chip from '@mui/material/Chip';
 import Divider from '@mui/material/Divider';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
-import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useCallback, useEffect, useState } from 'react';
 import { api, type AppState, type PublishedVersion, type Template } from '../api';
 import { useDialogs } from './dialogs';
 import { FolderField } from './FolderPicker';
+import { Field, PanelInput, PanelSelect, Section, StackedField, SwitchField } from './inspector';
 import { VariablesPanel } from './VariablesPanel';
 
 type Notify = (msg: string, sev?: 'success' | 'error' | 'info') => void;
@@ -71,8 +64,7 @@ function TemplateSection({ template, notify, reload, onRenamed }: SectionProps &
         const ok = await confirm({
             title: 'Delete template',
             message: `Delete "${template.name}" and all its files from disk? Published versions in the registry are removed too. This cannot be undone.`,
-            confirmText: 'Delete template',
-            danger: true,
+            confirmText: 'Delete template', danger: true,
         });
         if (!ok) return;
         try {
@@ -83,89 +75,31 @@ function TemplateSection({ template, notify, reload, onRenamed }: SectionProps &
     };
 
     return (
-        <Stack spacing={1.5}>
-            <TextField size="small" label="Name" value={name} onChange={(e) => setName(e.target.value)}
-                helperText={name !== template.name ? 'Renames the manifest and the template folder.' : undefined} />
-            <TextField size="small" label="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
-            <TextField size="small" label="Description" multiline maxRows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
-            <TextField size="small" label="Version" value={version} onChange={(e) => setVersion(e.target.value)} sx={{ width: 130 }} />
-            <Stack direction="row" spacing={1}>
-                <Button size="small" variant="contained" disabled={!dirty} onClick={save}>Save settings</Button>
+        <Section title="Template settings">
+            <StackedField label="Name" hint={name !== template.name ? 'Renames the manifest and the template folder.' : undefined}>
+                <PanelInput fullWidth value={name} onChange={(e) => setName(e.target.value)} />
+            </StackedField>
+            <StackedField label="Title"><PanelInput fullWidth value={title} onChange={(e) => setTitle(e.target.value)} /></StackedField>
+            <StackedField label="Description"><PanelInput fullWidth multiline maxRows={3} value={description} onChange={(e) => setDescription(e.target.value)} /></StackedField>
+            <Field label="Version" control={<PanelInput value={version} onChange={(e) => setVersion(e.target.value)} sx={{ width: 110 }} />} />
+            <Stack direction="row" spacing={1} sx={{ pt: 0.5 }}>
+                <Button size="small" variant="contained" disabled={!dirty} onClick={save}>Save</Button>
                 <Button size="small" variant="outlined" onClick={validate}>Validate</Button>
                 <Box sx={{ flex: 1 }} />
                 <Button size="small" color="error" variant="outlined" onClick={del}>Delete…</Button>
             </Stack>
-            <Typography variant="caption" color="text.secondary" sx={{ wordBreak: 'break-all' }}>{template.dir}</Typography>
-        </Stack>
+            <Typography variant="caption" color="text.secondary" sx={{ wordBreak: 'break-all', fontFamily: 'ui-monospace, monospace', fontSize: 10.5 }}>{template.dir}</Typography>
+        </Section>
     );
 }
 
-/* --------------------------- Export & publish --------------------------- */
+/* ------------------------------- Variables ------------------------------- */
 
-function PublishSection({ template, notify, reload }: SectionProps) {
-    const { confirm } = useDialogs();
-    const [bump, setBump] = useState<'none' | 'patch' | 'minor' | 'major'>('patch');
-    const [versions, setVersions] = useState<PublishedVersion[]>([]);
-    const [busy, setBusy] = useState(false);
-
-    const refresh = useCallback(() => {
-        api.published(template.name).then((r) => setVersions(r.versions)).catch(() => setVersions([]));
-    }, [template.name]);
-
-    useEffect(() => { refresh(); }, [refresh]);
-
-    const doExport = async (overwrite = false) => {
-        setBusy(true);
-        try {
-            const r = await api.exportTemplate({ templateName: template.name, bump: bump === 'none' ? undefined : bump, overwrite });
-            notify(`Published ${r.name}@${r.version}`, 'success');
-            refresh();
-            reload(); // version may have been bumped in the manifest
-        } catch (e) {
-            const msg = (e as Error).message;
-            if (!overwrite && /already published/.test(msg)) {
-                const ok = await confirm({
-                    title: 'Version already published',
-                    message: `${msg} Overwrite the published snapshot?`,
-                    confirmText: 'Overwrite', danger: true,
-                });
-                if (ok) return doExport(true);
-            }
-            notify(msg, 'error');
-        } finally {
-            setBusy(false);
-        }
-    };
-
+function VariablesSection({ template, notify, reload }: SectionProps) {
     return (
-        <Stack spacing={1.5}>
-            <Typography variant="caption" color="text.secondary">
-                Publishes a versioned snapshot of the template — placeholders intact — to the local registry
-                (<code>~/.virtuallab-create-library/published</code>). The CLI uses the latest published version and
-                asks for the values at generation time.
-            </Typography>
-            <Stack direction="row" spacing={1} alignItems="center">
-                <TextField select size="small" label="Bump" value={bump} onChange={(e) => setBump(e.target.value as typeof bump)} sx={{ width: 120 }}>
-                    <MenuItem value="none">none ({template.version})</MenuItem>
-                    <MenuItem value="patch">patch</MenuItem>
-                    <MenuItem value="minor">minor</MenuItem>
-                    <MenuItem value="major">major</MenuItem>
-                </TextField>
-                <Button size="small" variant="contained" startIcon={<PublishIcon />} disabled={busy} onClick={() => doExport(false)}>
-                    Publish version
-                </Button>
-            </Stack>
-            <Box>
-                <Typography variant="caption" color="text.secondary">Published versions</Typography>
-                <Stack direction="row" spacing={0.5} useFlexGap flexWrap="wrap" sx={{ mt: 0.5 }}>
-                    {versions.length === 0 && <Typography variant="body2" color="text.secondary">None yet.</Typography>}
-                    {versions.map((v) => (
-                        <Chip key={v.version} size="small" label={v.version} variant="outlined"
-                            color={v.version === template.version ? 'secondary' : 'default'} />
-                    ))}
-                </Stack>
-            </Box>
-        </Stack>
+        <Section title="Variables">
+            <VariablesPanel template={template} notify={notify} reload={reload} />
+        </Section>
     );
 }
 
@@ -187,7 +121,6 @@ function GenerateSection({ template, state, notify, onResult }: SectionProps & {
 
     const generate = async () => {
         try {
-            // Generation always merges into the target folder (created if missing).
             const r = await api.generate({ templateName: template.name, answers, features, mode: 'merge', into: into || undefined, force, includeManifest });
             onResult(r);
             notify('Generated', 'success');
@@ -203,59 +136,108 @@ function GenerateSection({ template, state, notify, onResult }: SectionProps & {
         } catch (e) { notify((e as Error).message, 'error'); }
     };
 
+    const tk = (t: string) => `${template.tokenConfig.start}${t}${template.tokenConfig.end}`;
+
     return (
-        <Stack spacing={1.5}>
-            <Typography variant="caption" color="text.secondary">
-                Replaces every {template.tokenConfig.start}token{template.tokenConfig.end} (in file contents and names)
-                with the values below and writes the result to the target directory. For a downloadable zip of the
-                published version, use <b>Export</b> in the top bar.
-            </Typography>
-            {template.variables.length > 0 && <Typography variant="caption" color="text.secondary">Variable values</Typography>}
+        <Section
+            title="Generate to folder"
+            description={<>Replaces every {tk('token')} with the values below and merges the result into the target folder (created if missing, existing files kept). For a downloadable zip of the published version, use Export in the top bar.</>}
+        >
+            {template.variables.length > 0 && (
+                <Typography variant="overline" color="text.secondary" sx={{ fontSize: 10 }}>Variable values</Typography>
+            )}
             {template.variables.map((v) => (
-                v.type === 'select' ? (
-                    <TextField key={v.name} select fullWidth size="small" label={v.message} value={answers[v.name] ?? ''}
-                        onChange={(e) => setAnswers((a) => ({ ...a, [v.name]: e.target.value }))}>
-                        {(v.options ?? []).map((o) => <MenuItem key={o} value={o}>{o}</MenuItem>)}
-                    </TextField>
+                <StackedField key={v.name} label={<>{v.message} <Box component="span" sx={{ fontFamily: 'ui-monospace, monospace', color: 'secondary.main' }}>{tk(v.token)}</Box></>}>
+                    {v.type === 'select' ? (
+                        <PanelSelect fullWidth value={answers[v.name] ?? ''} onChange={(val) => setAnswers((a) => ({ ...a, [v.name]: val }))}
+                            options={(v.options ?? []).map((o) => ({ value: o }))} />
+                    ) : (
+                        <PanelInput fullWidth value={answers[v.name] ?? ''} onChange={(e) => setAnswers((a) => ({ ...a, [v.name]: e.target.value }))} />
+                    )}
+                </StackedField>
+            ))}
+
+            {template.features.length > 0 && (
+                <Typography variant="overline" color="text.secondary" sx={{ fontSize: 10, mt: 0.5 }}>Features</Typography>
+            )}
+            {template.features.map((f) => (
+                f.type === 'select' ? (
+                    <Field key={f.id} label={f.label} control={
+                        <PanelSelect value={(features[f.id] as string) ?? ''} onChange={(val) => setFeatures((s) => ({ ...s, [f.id]: val }))}
+                            options={(f.options ?? []).map((o) => ({ value: o }))} sx={{ width: 140 }} />
+                    } />
                 ) : (
-                    <TextField key={v.name} fullWidth size="small"
-                        label={`${v.message} (${template.tokenConfig.start}${v.token}${template.tokenConfig.end})`}
-                        value={answers[v.name] ?? ''}
-                        onChange={(e) => setAnswers((a) => ({ ...a, [v.name]: e.target.value }))} />
+                    <SwitchField key={f.id} label={f.label} checked={!!features[f.id]} onChange={(v) => setFeatures((s) => ({ ...s, [f.id]: v }))} />
                 )
             ))}
 
-            {template.features.length > 0 && <Typography variant="caption" color="text.secondary">Features</Typography>}
-            {template.features.map((f) => (
-                <Stack key={f.id} direction="row" alignItems="center" justifyContent="space-between">
-                    <Typography variant="body2">{f.label}</Typography>
-                    {f.type === 'select' ? (
-                        <TextField select size="small" sx={{ width: 140 }} value={(features[f.id] as string) ?? ''}
-                            onChange={(e) => setFeatures((s) => ({ ...s, [f.id]: e.target.value }))}>
-                            {(f.options ?? []).map((o) => <MenuItem key={o} value={o}>{o}</MenuItem>)}
-                        </TextField>
-                    ) : (
-                        <Checkbox size="small" checked={!!features[f.id]} onChange={(e) => setFeatures((s) => ({ ...s, [f.id]: e.target.checked }))} />
-                    )}
-                </Stack>
-            ))}
-
-            <Divider />
-            <FolderField
-                label="Target folder" value={into} onChange={setInto}
-                placeholder={state.cwd}
-                helperText="Content is merged here (folder is created if missing; existing files kept)."
-                pickerTitle="Target folder"
-            />
-            <FormControlLabel control={<Checkbox size="small" checked={force} onChange={(e) => setForce(e.target.checked)} />}
-                label={<Typography variant="body2">Overwrite existing files</Typography>} />
-            <FormControlLabel control={<Checkbox size="small" checked={includeManifest} onChange={(e) => setIncludeManifest(e.target.checked)} />}
-                label={<Typography variant="body2">Include template meta files (template.json, features/)</Typography>} />
-            <Stack direction="row" spacing={1}>
+            <Divider sx={{ my: 0.5 }} />
+            <StackedField label="Target folder" hint="Merged here; folder is created if missing.">
+                <FolderField label="" value={into} onChange={setInto} placeholder={state.cwd} pickerTitle="Target folder" />
+            </StackedField>
+            <SwitchField label="Overwrite existing files" checked={force} onChange={setForce} />
+            <SwitchField label="Include template meta files" hint="template.json, features/" checked={includeManifest} onChange={setIncludeManifest} />
+            <Stack direction="row" spacing={1} sx={{ pt: 0.5 }}>
                 <Button variant="contained" startIcon={<RocketLaunchIcon />} onClick={generate}>Generate</Button>
                 <Button variant="outlined" onClick={savePreset}>Save preset…</Button>
             </Stack>
-        </Stack>
+        </Section>
+    );
+}
+
+/* --------------------------- Publish to registry ------------------------- */
+
+function PublishSection({ template, notify, reload }: SectionProps) {
+    const { confirm } = useDialogs();
+    const [bump, setBump] = useState<'none' | 'patch' | 'minor' | 'major'>('patch');
+    const [versions, setVersions] = useState<PublishedVersion[]>([]);
+    const [busy, setBusy] = useState(false);
+
+    const refresh = useCallback(() => {
+        api.published(template.name).then((r) => setVersions(r.versions)).catch(() => setVersions([]));
+    }, [template.name]);
+
+    useEffect(() => { refresh(); }, [refresh]);
+
+    const doExport = async (overwrite = false) => {
+        setBusy(true);
+        try {
+            const r = await api.exportTemplate({ templateName: template.name, bump: bump === 'none' ? undefined : bump, overwrite });
+            notify(`Published ${r.name}@${r.version}`, 'success');
+            refresh();
+            reload();
+        } catch (e) {
+            const msg = (e as Error).message;
+            if (!overwrite && /already published/.test(msg)) {
+                const ok = await confirm({ title: 'Version already published', message: `${msg} Overwrite the published snapshot?`, confirmText: 'Overwrite', danger: true });
+                if (ok) return doExport(true);
+            }
+            notify(msg, 'error');
+        } finally { setBusy(false); }
+    };
+
+    return (
+        <Section
+            title="Publish to registry"
+            defaultOpen={false}
+            description={<>Publishes a versioned snapshot — placeholders intact — to the local registry. The CLI uses the latest published version.</>}
+        >
+            <Field label="Version bump" control={
+                <PanelSelect value={bump} onChange={(v) => setBump(v as typeof bump)} sx={{ width: 150 }}
+                    options={[{ value: 'none', label: `none (${template.version})` }, { value: 'patch' }, { value: 'minor' }, { value: 'major' }]} />
+            } />
+            <Button size="small" variant="contained" startIcon={<PublishIcon />} disabled={busy} onClick={() => doExport(false)} sx={{ alignSelf: 'flex-start' }}>
+                Publish version
+            </Button>
+            <StackedField label="Published versions">
+                <Stack direction="row" spacing={0.5} useFlexGap flexWrap="wrap">
+                    {versions.length === 0 && <Typography variant="body2" color="text.secondary">None yet.</Typography>}
+                    {versions.map((v) => (
+                        <Chip key={v.version} size="small" label={v.version} variant="outlined" color={v.version === template.version ? 'secondary' : 'default'} />
+                    ))}
+                </Stack>
+            </StackedField>
+        </Section>
     );
 }
 
@@ -281,21 +263,20 @@ function ComponentsSection({ template, notify, reload }: SectionProps) {
     };
 
     return (
-        <Stack spacing={1.5}>
-            <Typography variant="caption" color="text.secondary">Scaffold a component + a feature toggle for it.</Typography>
+        <Section title="Components & dirs" defaultOpen={false} description="Scaffold a component + a feature toggle for it.">
             <Stack direction="row" spacing={1}>
-                <TextField size="small" label="Component (PascalCase)" placeholder="Modal" value={name} onChange={(e) => setName(e.target.value)} sx={{ flex: 1 }} />
+                <PanelInput fullWidth placeholder="Modal" value={name} onChange={(e) => setName(e.target.value)} />
                 <Button size="small" variant="contained" onClick={addComponent} sx={{ flexShrink: 0 }}>Add</Button>
             </Stack>
-            <FormControlLabel control={<Checkbox size="small" checked={byDefault} onChange={(e) => setByDefault(e.target.checked)} />}
-                label={<Typography variant="body2">Included by default</Typography>} />
-            <Divider />
-            <Typography variant="caption" color="text.secondary">Register an external templates directory.</Typography>
-            <Stack direction="row" spacing={1}>
-                <TextField size="small" fullWidth placeholder="C:\\path\\to\\templates" value={dir} onChange={(e) => setDir(e.target.value)} />
-                <Button size="small" variant="outlined" onClick={addDir} sx={{ flexShrink: 0 }}>Add</Button>
-            </Stack>
-        </Stack>
+            <SwitchField label="Included by default" checked={byDefault} onChange={setByDefault} />
+            <Divider sx={{ my: 0.5 }} />
+            <StackedField label="Register an external templates directory">
+                <Stack direction="row" spacing={1}>
+                    <PanelInput fullWidth placeholder="C:\\path\\to\\templates" value={dir} onChange={(e) => setDir(e.target.value)} />
+                    <Button size="small" variant="outlined" onClick={addDir} sx={{ flexShrink: 0 }}>Add</Button>
+                </Stack>
+            </StackedField>
+        </Section>
     );
 }
 
@@ -310,21 +291,10 @@ interface PanelProps {
     onRenamed: (name: string) => void;
 }
 
-function Section({ title, defaultExpanded, children }: { title: string; defaultExpanded?: boolean; children: React.ReactNode }) {
-    return (
-        <Accordion disableGutters defaultExpanded={defaultExpanded} sx={{ bgcolor: 'transparent', backgroundImage: 'none', '&:before': { display: 'none' } }}>
-            <AccordionSummary expandIcon={<ExpandMoreIcon fontSize="small" />} sx={{ minHeight: 40, '& .MuiAccordionSummary-content': { my: 0.5 } }}>
-                <Typography variant="overline" color="text.secondary">{title}</Typography>
-            </AccordionSummary>
-            <AccordionDetails sx={{ pt: 0 }}>{children}</AccordionDetails>
-        </Accordion>
-    );
-}
-
 export function RightPanel({ template, state, notify, reload, onResult, onRenamed }: PanelProps) {
     return (
         <Box sx={{ height: '100%', overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
-            <Box sx={{ px: 2, py: 1.5, borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
+            <Box sx={{ px: 2, py: 1.5, borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper', position: 'sticky', top: 0, zIndex: 1 }}>
                 <Stack direction="row" spacing={1} alignItems="center">
                     <Box sx={{ minWidth: 0, flex: 1 }}>
                         <Typography variant="subtitle2" noWrap title={template.name}>{template.title || template.name}</Typography>
@@ -333,26 +303,12 @@ export function RightPanel({ template, state, notify, reload, onResult, onRename
                     <Chip size="small" label={`v${template.version}`} color="primary" variant="outlined" sx={{ height: 20 }} />
                 </Stack>
             </Box>
-            <Box sx={{ flex: 1, overflow: 'auto' }}>
-                <Section title="Template settings" defaultExpanded>
-                    <TemplateSection template={template} state={state} notify={notify} reload={reload} onRenamed={onRenamed} />
-                </Section>
-                <Divider />
-                <Section title="Variables" defaultExpanded>
-                    <VariablesPanel template={template} notify={notify} reload={reload} />
-                </Section>
-                <Divider />
-                <Section title="Generate to folder" defaultExpanded>
-                    <GenerateSection template={template} state={state} notify={notify} reload={reload} onResult={onResult} />
-                </Section>
-                <Divider />
-                <Section title="Publish to registry">
-                    <PublishSection template={template} state={state} notify={notify} reload={reload} />
-                </Section>
-                <Divider />
-                <Section title="Components & dirs">
-                    <ComponentsSection template={template} state={state} notify={notify} reload={reload} />
-                </Section>
+            <Box sx={{ flex: 1, overflow: 'auto', '& > div + div': { borderTop: 1, borderColor: 'divider' } }}>
+                <TemplateSection template={template} state={state} notify={notify} reload={reload} onRenamed={onRenamed} />
+                <VariablesSection template={template} state={state} notify={notify} reload={reload} />
+                <GenerateSection template={template} state={state} notify={notify} reload={reload} onResult={onResult} />
+                <PublishSection template={template} state={state} notify={notify} reload={reload} />
+                <ComponentsSection template={template} state={state} notify={notify} reload={reload} />
             </Box>
         </Box>
     );

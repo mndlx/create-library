@@ -17,6 +17,13 @@ back-office (`bo-web/` → builds into `web/`, served by `bin/bo-web.ts`).
 
 - **UI dialogs only** — never `window.alert/prompt/confirm`; use the MUI dialog
   helpers in `bo-web/src/components/dialogs.tsx` (`useDialogs().prompt/confirm`).
+- **Inspector / detail panels** — build them with the primitives in
+  `bo-web/src/components/inspector.tsx`, never ad-hoc layouts. House style:
+  flat collapsible `Section`s (overline header + optional description) separated
+  by dividers; inside, `Field` for compact "label-left / control-right" rows,
+  `SwitchField` for toggles, `StackedField` for wide inputs, and `PanelInput`/
+  `PanelSelect` (filled, compact) for every control. Folder paths use
+  `FolderField` (server-backed picker), not free-text. See the `panel-ui` skill.
 - Engine stays framework-free and synchronous where possible; the server is a
   thin HTTP layer over `engine/`.
 - Dynamic tokens default to `@@…@@`; templates without `tokenConfig` use the
