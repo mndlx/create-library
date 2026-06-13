@@ -13,7 +13,7 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useEffect, useState } from 'react';
 import { api, type Template, type Variable } from '../api';
-import { Field, PanelInput, PanelSelect, StackedField, SwitchField } from './inspector';
+import { PanelInput, PanelSelect, StackedField, SwitchField } from './inspector';
 
 interface Props {
     template: Template;
@@ -143,14 +143,14 @@ export function VariablesPanel({ template, notify, reload }: Props) {
 
     return (
         <>
-            <Field
-                label={<Typography variant="caption" color="text.secondary">Delimiters <Box component="code">{start}…{end}</Box> — from tokenConfig in template.json</Typography>}
-                control={
-                    <Tooltip title="Re-scan the template files for tokens (after manual edits)">
-                        <Button size="small" startIcon={<SyncIcon />} onClick={reload}>Sync</Button>
-                    </Tooltip>
-                }
-            />
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ minHeight: 26 }}>
+                <Typography variant="caption" color="text.secondary" noWrap sx={{ flex: 1, minWidth: 0, fontSize: 11 }}>
+                    Delimiters <Box component="code">{start}…{end}</Box> · from tokenConfig
+                </Typography>
+                <Tooltip title="Re-scan the template files for tokens (after manual edits)">
+                    <Button size="small" startIcon={<SyncIcon />} onClick={reload}>Sync</Button>
+                </Tooltip>
+            </Stack>
 
             {template.foreignTokens.map((f) => (
                 <Alert
