@@ -10,7 +10,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, type AppState, type PublishedVersion, type Template } from '../api';
 import { useDialogs } from './dialogs';
 import { FolderField } from './FolderPicker';
-import { Field, PanelInput, PanelSelect, Section, StackedField, SwitchField } from './inspector';
+import { Field, PanelInput, PanelSelect, Section, SwitchField } from './inspector';
 import { VariablesPanel } from './VariablesPanel';
 
 type Notify = (msg: string, sev?: 'success' | 'error' | 'info') => void;
@@ -172,9 +172,8 @@ function GenerateSection({ template, state, notify, onResult }: SectionProps & {
             ))}
 
             <Divider sx={{ my: 0.5 }} />
-            <StackedField label="Target folder" hint="Merged here; folder is created if missing.">
-                <FolderField label="" value={into} onChange={setInto} placeholder={state.cwd} pickerTitle="Target folder" />
-            </StackedField>
+            <Field label="Target folder" hint="created if missing"
+                control={<FolderField value={into} onChange={setInto} placeholder={state.cwd} pickerTitle="Target folder" />} />
             <SwitchField label="Overwrite existing files" checked={force} onChange={setForce} />
             <SwitchField label="Include template meta files" hint="template.json, features/" checked={includeManifest} onChange={setIncludeManifest} />
             <Stack direction="row" spacing={1} sx={{ pt: 0.5 }}>
@@ -229,14 +228,14 @@ function PublishSection({ template, notify, reload }: SectionProps) {
             <Button size="small" variant="contained" startIcon={<PublishIcon />} disabled={busy} onClick={() => doExport(false)} sx={{ alignSelf: 'flex-start' }}>
                 Publish version
             </Button>
-            <StackedField label="Published versions">
-                <Stack direction="row" spacing={0.5} useFlexGap flexWrap="wrap">
+            <Field label="Published" align="start" control={
+                <Stack direction="row" spacing={0.5} useFlexGap flexWrap="wrap" sx={{ pt: 0.25 }}>
                     {versions.length === 0 && <Typography variant="body2" color="text.secondary">None yet.</Typography>}
                     {versions.map((v) => (
                         <Chip key={v.version} size="small" label={v.version} variant="outlined" color={v.version === template.version ? 'secondary' : 'default'} />
                     ))}
                 </Stack>
-            </StackedField>
+            } />
         </Section>
     );
 }
@@ -264,18 +263,20 @@ function ComponentsSection({ template, notify, reload }: SectionProps) {
 
     return (
         <Section title="Components & dirs" defaultOpen={false} description="Scaffold a component + a feature toggle for it.">
-            <Stack direction="row" spacing={1}>
-                <PanelInput fullWidth placeholder="Modal" value={name} onChange={(e) => setName(e.target.value)} />
-                <Button size="small" variant="contained" onClick={addComponent} sx={{ flexShrink: 0 }}>Add</Button>
-            </Stack>
+            <Field label="Component" control={
+                <Stack direction="row" spacing={1}>
+                    <PanelInput fullWidth placeholder="Modal" value={name} onChange={(e) => setName(e.target.value)} />
+                    <Button size="small" variant="contained" onClick={addComponent} sx={{ flexShrink: 0 }}>Add</Button>
+                </Stack>
+            } />
             <SwitchField label="Included by default" checked={byDefault} onChange={setByDefault} />
             <Divider sx={{ my: 0.5 }} />
-            <StackedField label="Register an external templates directory">
+            <Field label="External dir" control={
                 <Stack direction="row" spacing={1}>
                     <PanelInput fullWidth placeholder="C:\\path\\to\\templates" value={dir} onChange={(e) => setDir(e.target.value)} />
                     <Button size="small" variant="outlined" onClick={addDir} sx={{ flexShrink: 0 }}>Add</Button>
                 </Stack>
-            </StackedField>
+            } />
         </Section>
     );
 }

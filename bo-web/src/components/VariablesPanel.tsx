@@ -13,7 +13,7 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useEffect, useState } from 'react';
 import { api, type Template, type Variable } from '../api';
-import { PanelInput, PanelSelect, StackedField, SwitchField } from './inspector';
+import { Field, PanelInput, PanelSelect, SwitchField } from './inspector';
 
 interface Props {
     template: Template;
@@ -92,23 +92,15 @@ function VariableRow({ template, v, notify, reload }: { template: Template; v: V
                     <IconButton size="small" onClick={remove}><DeleteOutlineIcon fontSize="small" /></IconButton>
                 </Tooltip>
             </Stack>
-            <Stack spacing={1}>
-                <StackedField label="Question asked at generation">
-                    <PanelInput fullWidth value={form.message} onChange={(e) => update({ message: e.target.value })} />
-                </StackedField>
-                <Stack direction="row" spacing={1}>
-                    <StackedField label="Default"><PanelInput fullWidth value={form.def} onChange={(e) => update({ def: e.target.value })} /></StackedField>
-                    <Box sx={{ width: 110, flexShrink: 0 }}>
-                        <StackedField label="Type">
-                            <PanelSelect fullWidth value={form.type} onChange={(val) => update({ type: val as Variable['type'] })}
-                                options={[{ value: 'text' }, { value: 'select' }]} />
-                        </StackedField>
-                    </Box>
-                </Stack>
+            <Stack spacing={0.75}>
+                <Field label="Question" labelWidth={72} control={<PanelInput fullWidth value={form.message} onChange={(e) => update({ message: e.target.value })} />} />
+                <Field label="Default" labelWidth={72} control={<PanelInput fullWidth value={form.def} onChange={(e) => update({ def: e.target.value })} />} />
+                <Field label="Type" labelWidth={72} control={
+                    <PanelSelect fullWidth value={form.type} onChange={(val) => update({ type: val as Variable['type'] })}
+                        options={[{ value: 'text' }, { value: 'select' }]} />
+                } />
                 {form.type === 'select' && (
-                    <StackedField label="Options (comma-separated)">
-                        <PanelInput fullWidth value={form.options} onChange={(e) => update({ options: e.target.value })} />
-                    </StackedField>
+                    <Field label="Options" labelWidth={72} control={<PanelInput fullWidth value={form.options} onChange={(e) => update({ options: e.target.value })} />} />
                 )}
                 <SwitchField label="Expose in CLI" hint="off = its default is used" checked={form.exposeCli} onChange={(c) => update({ exposeCli: c })} />
             </Stack>
@@ -177,13 +169,15 @@ export function VariablesPanel({ template, notify, reload }: Props) {
                 <VariableRow key={v.token} template={template} v={v} notify={notify} reload={reload} />
             ))}
 
-            <Stack direction="row" spacing={1} alignItems="center">
-                <PanelInput placeholder="new token, e.g. apiUrl" value={newToken} fullWidth
-                    onChange={(e) => setNewToken(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') addVariable(); }}
-                />
-                <Button variant="contained" startIcon={<AddIcon />} onClick={addVariable} sx={{ flexShrink: 0 }}>Add</Button>
-            </Stack>
+            <Field label="New token" control={
+                <Stack direction="row" spacing={1} alignItems="center">
+                    <PanelInput placeholder="e.g. apiUrl" value={newToken} fullWidth
+                        onChange={(e) => setNewToken(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') addVariable(); }}
+                    />
+                    <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={addVariable} sx={{ flexShrink: 0 }}>Add</Button>
+                </Stack>
+            } />
         </>
     );
 }

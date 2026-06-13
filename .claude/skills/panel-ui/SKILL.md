@@ -17,9 +17,15 @@ ad-hoc panel layouts (loose `TextField`s with floating labels, custom headers,
 - Each `Section` has an **overline header** (uppercase, letter-spaced, muted),
   an optional one-line **description** caption, and an optional right-aligned
   **action**. Clicking the header toggles a chevron and collapses the body.
-- Inside a section, prefer **inline rows**: a label on the left, the control on
-  the right (`Field` / `SwitchField`). Use **stacked rows** (`StackedField`)
-  only for wide inputs (long text, multiline, folder paths, comma lists).
+- Every labelled control is one of **two row types**, both with the label
+  starting at the same left edge so labels line up in one column:
+  - **Input / select row** (`Field`) — a small fixed left label column, the
+    control fills the value column. Use for every text/select/path value.
+  - **Toggle row** (`SwitchField`) — the label grows from the left, the `Switch`
+    is pinned to the right edge. Use for every boolean.
+- Labels are short and **truncate with a tooltip** (`noWrap` + `title`); keep
+  them terse so they fit the label column. `StackedField` (label above) exists
+  only for rare wide content — avoid it in panels; prefer `Field`.
 - Controls are **filled, compact** (`PanelInput` / `PanelSelect`): a dark filled
   box with a 1px divider border, no floating label. Toggles are MUI `Switch`,
   never checkboxes.

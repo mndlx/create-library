@@ -18,7 +18,7 @@ import { useState, type ReactNode } from 'react';
  * Controls are the compact filled PanelInput/PanelSelect. Toggles use Switch.
  */
 
-const LABEL_COL = 104;
+const LABEL_COL = 112;
 
 const inputSx = {
     '& .MuiFilledInput-root': {
@@ -118,9 +118,17 @@ export function StackedField({ label, hint, children }: { label?: ReactNode; hin
     );
 }
 
-/** Inline label + switch. */
+/** Toggle row: label grows from the left, the switch is pinned right. */
 export function SwitchField({ label, hint, checked, onChange }: {
     label: ReactNode; hint?: ReactNode; checked: boolean; onChange: (v: boolean) => void;
 }) {
-    return <Field label={label} hint={hint} labelWidth={180} control={<Switch size="small" checked={checked} onChange={(e) => onChange(e.target.checked)} />} />;
+    return (
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ minHeight: 26 }}>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography variant="caption" color="text.secondary" noWrap sx={{ fontSize: 11.5, lineHeight: 1.3 }} title={typeof label === 'string' ? label : undefined}>{label}</Typography>
+                {hint && <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block', fontSize: 10 }}>{hint}</Typography>}
+            </Box>
+            <Switch size="small" checked={checked} onChange={(e) => onChange(e.target.checked)} sx={{ ml: 'auto', flexShrink: 0 }} />
+        </Stack>
+    );
 }
