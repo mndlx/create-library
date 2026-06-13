@@ -324,10 +324,13 @@ function Section({ title, defaultExpanded, children }: { title: string; defaultE
 export function RightPanel({ template, state, notify, reload, onResult, onRenamed }: PanelProps) {
     return (
         <Box sx={{ height: '100%', overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
-            <Box sx={{ px: 2, py: 1.5, borderBottom: 1, borderColor: 'divider' }}>
+            <Box sx={{ px: 2, py: 1.5, borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
                 <Stack direction="row" spacing={1} alignItems="center">
-                    <Typography variant="subtitle2" noWrap sx={{ flex: 1 }} title={template.name}>{template.title || template.name}</Typography>
-                    <Chip size="small" label={`v${template.version}`} variant="outlined" sx={{ height: 20 }} />
+                    <Box sx={{ minWidth: 0, flex: 1 }}>
+                        <Typography variant="subtitle2" noWrap title={template.name}>{template.title || template.name}</Typography>
+                        <Typography variant="caption" color="text.secondary" noWrap sx={{ fontFamily: 'ui-monospace, monospace', fontSize: 10.5 }}>{template.name}</Typography>
+                    </Box>
+                    <Chip size="small" label={`v${template.version}`} color="primary" variant="outlined" sx={{ height: 20 }} />
                 </Stack>
             </Box>
             <Box sx={{ flex: 1, overflow: 'auto' }}>

@@ -194,9 +194,14 @@ export function App() {
         <Box sx={{ display: 'flex', height: '100vh' }}>
             <AppBar position="fixed" sx={{ zIndex: (t) => t.zIndex.drawer + 1 }}>
                 <Toolbar variant="dense">
-                    <CodeIcon sx={{ mr: 1, color: 'primary.main' }} />
-                    <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>create-library</Typography>
-                    <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>· back-office</Typography>
+                    <Box sx={{
+                        width: 28, height: 28, mr: 1.25, borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        background: 'linear-gradient(135deg, #5b9dff 0%, #4ade80 100%)', color: '#06121f',
+                    }}>
+                        <CodeIcon sx={{ fontSize: 18 }} />
+                    </Box>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 700, letterSpacing: '-0.01em' }}>create-library</Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ ml: 1, display: { xs: 'none', sm: 'block' } }}>back-office</Typography>
                     <Box sx={{ flex: 1 }} />
                     {template && !workspace && (
                         <Button size="small" startIcon={<FileDownloadIcon />} variant="contained" onClick={() => setExportOpen(true)} sx={{ mr: 1 }}>
@@ -238,11 +243,15 @@ export function App() {
                                 <ListItemText
                                     primary={
                                         <Stack direction="row" spacing={1} alignItems="center">
-                                            <span>{t.name}</span>
-                                            <Chip size="small" label={`v${t.version}`} variant="outlined" sx={{ height: 18, fontSize: 10 }} />
+                                            <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>{t.name}</Typography>
+                                            <Chip size="small" label={`v${t.version}`} variant="outlined" sx={{ height: 17, fontSize: 10, '& .MuiChip-label': { px: 0.75 } }} />
                                         </Stack>
                                     }
-                                    secondary={`${t.variables.length} var · ${t.features.length} feat`}
+                                    secondary={
+                                        <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'ui-monospace, monospace', fontSize: 11 }}>
+                                            {t.variables.length} var · {t.features.length} feat
+                                        </Typography>
+                                    }
                                 />
                             </ListItemButton>
                         ))}
