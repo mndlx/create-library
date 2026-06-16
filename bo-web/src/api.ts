@@ -62,7 +62,7 @@ export const api = {
     createTemplate: (p: { name: string; shortName?: string; author?: string; sourceName?: string; rootDir: string }) =>
         req<{ dir: string; name: string }>('/api/create-template', p),
 
-    generate: (p: { templateName: string; name?: string; params: Record<string, string>; into?: string; force?: boolean }) =>
+    generate: (p: { templateName: string; name?: string; params: Record<string, string>; into?: string; force?: boolean; subfolder?: boolean }) =>
         req<{ into: string; output: string }>('/api/generate', p),
 
     setMeta: (p: { templateName: string; title?: string; author?: string; sourceName?: string; classifications?: string }) =>

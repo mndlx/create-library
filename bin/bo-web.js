@@ -176,10 +176,13 @@ async function handleApi(req, res, pathname, query) {
     // Generate a project from a dotnet template via the .NET CLI.
     if (req.method === 'POST' && pathname === '/api/generate') {
         const t = requireTemplate(body.templateName);
-        const into = path.resolve(body.into || process.cwd());
-        fs.mkdirSync(into, { recursive: true });
-        const output = (0, engine_1.generateDotnet)({ template: t, outDir: into, name: body.name || undefined, params: body.params || {}, force: !!body.force });
-        return sendJson(res, 200, { ok: true, into, output });
+        const base = path.resolve(body.into || process.cwd());
+        const name = body.name || t.sourceName || t.shortName;
+        // Optionally place output in a subfolder named after the project.
+        const outDir = body.subfolder ? path.join(base, name) : base;
+        fs.mkdirSync(outDir, { recursive: true });
+        const output = (0, engine_1.generateDotnet)({ template: t, outDir, name, params: body.params || {}, force: !!body.force });
+        return sendJson(res, 200, { ok: true, into: outDir, output });
     }
     if (req.method === 'POST' && pathname === '/api/create-template') {
         const name = String(body.name || '').trim();

@@ -98,16 +98,17 @@ function GenerateBody({ template, state, notify, onResult }: SectionProps & { on
     const [params, setParams] = useState<Record<string, string>>({});
     const [into, setInto] = useState('');
     const [force, setForce] = useState(false);
+    const [subfolder, setSubfolder] = useState(true);
 
     useEffect(() => {
         setName(template.sourceName || template.shortName);
         setParams(Object.fromEntries(template.symbols.map((s) => [s.name, s.defaultValue ?? ''])));
-        setInto(''); setForce(false);
+        setInto(''); setForce(false); setSubfolder(true);
     }, [template]);
 
     const generate = async () => {
         try {
-            const r = await api.generate({ templateName: template.name, name: name || undefined, params, into: into || undefined, force });
+            const r = await api.generate({ templateName: template.name, name: name || undefined, params, into: into || undefined, force, subfolder });
             onResult(r);
             notify('Generated', 'success');
         } catch (e) { notify((e as Error).message, 'error'); }
@@ -134,6 +135,7 @@ function GenerateBody({ template, state, notify, onResult }: SectionProps & { on
             ))}
             <Divider sx={{ my: 0.5 }} />
             <Field label="Target folder" control={<FolderField value={into} onChange={setInto} placeholder={state.cwd} pickerTitle="Target folder" />} />
+            <SwitchField label={`Create subfolder "${name || template.shortName}"`} checked={subfolder} onChange={setSubfolder} />
             <SwitchField label="Force (overwrite)" checked={force} onChange={setForce} />
             <Button variant="contained" startIcon={<RocketLaunchIcon />} onClick={generate} sx={{ alignSelf: 'flex-start', mt: 0.5 }}>Generate</Button>
         </>
