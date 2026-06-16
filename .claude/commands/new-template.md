@@ -1,18 +1,16 @@
 ---
-description: Scaffold or import a new template
+description: Scaffold a new dotnet new template
 ---
 
-Create a new template for create-library. Arguments: `$ARGUMENTS` (template
-name, optionally followed by a source directory to import).
+Create a new `dotnet new` template for create-library. Arguments:
+`$ARGUMENTS` (display name, optionally a short name).
 
-1. Confirm the template **name**, **output** mode (`new` or `merge`), payload
-   **layout** (`template/` subfolder or flat `.`), and target **directory**.
-2. If a source directory was given, import it (copy as payload, excluding
-   `node_modules`/`.git`); otherwise scaffold a minimal template.
-3. Prefer doing this through the engine (`scaffoldTemplate` / `importTemplate`)
-   or the running back-office API rather than hand-writing files.
-4. After creating, list the auto-detected tokens so the user can fill in their
-   metadata.
-
-Dynamic tokens use `@@…@@`. Remind the user that tokens are picked up from both
-file contents and file/dir names.
+1. Confirm the **display name**, **short name** (`dotnet new <shortName>`),
+   **source name** (the string `-n` renames at generation), and target
+   **directory**.
+2. Scaffold a `.template.config/template.json` skeleton — prefer the engine
+   (`scaffoldDotnetTemplate`) or the running back-office API over hand-writing.
+3. After creating, add payload files and define **parameters** (manifest
+   `symbols`: datatype string/bool/choice, default, and `replaces` = the literal
+   token the value substitutes). `sourceName` is renamed by `dotnet new -n`.
+4. Generation runs `dotnet new` — remind the user the .NET SDK must be on PATH.

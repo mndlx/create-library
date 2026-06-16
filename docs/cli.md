@@ -1,71 +1,48 @@
 # CLI
 
-Generate a project from a template without the web UI.
+Generate a project from a `dotnet new` template without the web UI.
 
 ```bash
-node ./bin/generate.js          # interactive: pick a template, answer prompts
-# or, once published / linked:
+npm run dev            # bin/generate.js
+# or, once linked/published:
 npx virtuallab-create-library
 ```
 
+Requires the .NET SDK on PATH.
+
 ## Flow
 
-1. **Template** — pick from the list (or pass `--template <name>` to skip).
-   A card shows title, version, output mode, token delimiters, and counts.
-2. **Variables** — each prompt shows the token it fills (e.g. `@@APIURL@@`),
-   the question, and the default (`Enter` accepts it). Only `exposeCli` tokens
-   are asked.
-3. **Features** — yes/no or option selection per feature.
-4. **Plan summary** — before writing anything the CLI prints what will happen:
-   `NEW  creating new folder → <dir>` or `MERGE  merging into existing
-   project → <dir>`, the active features, and a warning for any token that
-   would be replaced with an empty value.
+1. **Template** — pick from the discovered templates (or `--template <shortName>`).
+2. **Name (-n)** — the project name; also replaces the template's `sourceName`.
+3. **Parameters** — one prompt per `symbol`: text for `string`, yes/no for
+   `bool`, a list for `choice`. Defaults are pre-filled.
+4. **Location** — the target directory, and whether to nest the output in a
+   `<name>/` subfolder (asked; default yes).
 
-In **merge** mode nothing new is created: files are merged into the target
-project (existing files kept unless `--force`), and the result lists added
-and skipped files.
+It then runs `dotnet new install → dotnet new <shortName> -o … -n … [--symbol
+value] → dotnet new uninstall` and prints the .NET CLI output.
 
 ## Flags
 
 | Flag | Effect |
 |------|--------|
-| `--template <name>`, `-t` | Use this template directly (skip the picker). |
-| `--new` / `--merge` | Force the output mode (default: the template's `output`). |
-| `--into <dir>` | Target directory (default: current working directory). |
-| `--preset <file>` | Generate from a saved preset (skips prompts — the headless mode). |
-| `--save-preset <file>` | Save the chosen answers/features to a preset file. |
-| `--force` | In merge mode, overwrite existing files. |
-| `--yes`, `-y` | Use defaults, no prompts (warns about empty token values). |
-
-## Tokens and `exposeCli`
-
-The CLI prompts for each detected/declared token, in order. A token whose
-metadata has `exposeCli: false` is **not** prompted — its default is used. Set
-this in the back-office (Author → Variables → the **CLI** switch) or directly in
-`template.json`.
-
-## Presets
-
-A preset is a JSON file capturing a template name plus answers and feature
-selections:
-
-```json
-{
-  "template": "my-template",
-  "answers": { "COMPONENT": "Todo", "TITLE": "My tasks" },
-  "features": { "tests": true }
-}
-```
-
-Create one with `--save-preset`, replay it with `--preset`.
+| `--template <shortName>`, `-t` | Use this template (skip the picker). |
+| `--name <name>`, `-n` | Project name (`-n`). |
+| `--into <dir>`, `-o` | Base output directory (default: cwd). |
+| `--flat` | Don't create a `<name>` subfolder — write straight into `--into`. |
+| `--force` | Pass `--force` to `dotnet new` (overwrite). |
+| `--yes`, `-y` | Use defaults, no prompts. |
 
 ## Where templates come from
 
-Templates are discovered in:
+Discovered from: the bundled `templates/` directory, `VLCL_TEMPLATES_DIR`
+(OS path-delimiter separated), and directories registered in
+`~/.virtuallab-create-library.json`. A registered directory can be a template
+itself (`.template.config`) or a parent of several.
 
-1. the bundled `templates/` directory,
-2. any path in the `VLCL_TEMPLATES_DIR` env var (OS path-separated),
-3. directories registered in `~/.virtuallab-create-library.json`.
+## Authoring
 
-A registered directory may hold one template per child folder, or be a template
-itself (contain `template.json`).
+The standalone terminal authoring menu is gone — author templates in the web
+back-office (`npm run bo:web`): edit files, define parameters, scaffold new
+templates. You can also create templates by hand (any folder with
+`.template.config/template.json`) and register the directory.
