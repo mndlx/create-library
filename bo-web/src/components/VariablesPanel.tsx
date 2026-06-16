@@ -14,6 +14,7 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useEffect, useState } from 'react';
 import { api, type Template, type Variable } from '../api';
+import { useDialogs } from './dialogs';
 import { Field, PanelInput, PanelSelect, SwitchField } from './inspector';
 
 interface Props {
@@ -33,6 +34,7 @@ function SaveStatus({ state }: { state: SaveState }) {
 }
 
 function VariableRow({ template, v, notify, reload }: { template: Template; v: Variable } & Omit<Props, 'template'>) {
+    const { confirm } = useDialogs();
     const [form, setForm] = useState({
         message: v.message, def: v.default, type: v.type,
         options: (v.options ?? []).join(', '), exposeCli: v.exposeCli, required: v.required,
@@ -74,6 +76,12 @@ function VariableRow({ template, v, notify, reload }: { template: Template; v: V
     }, [form, state, template.name, v, notify]);
 
     const remove = async () => {
+        const ok = await confirm({
+            title: 'Remove variable',
+            message: `Remove the saved metadata for ${tk}? The token stays in your files; only its question/default/options are forgotten.`,
+            confirmText: 'Remove', danger: true,
+        });
+        if (!ok) return;
         try { await api.removeVariable({ templateName: template.name, token: v.token }); notify('Removed', 'info'); reload(); }
         catch (e) { notify((e as Error).message, 'error'); }
     };
