@@ -26,6 +26,45 @@ const LANGS: Record<string, string> = {
 };
 const langOf = (p: string) => LANGS[p.split('.').pop()?.toLowerCase() ?? ''] ?? 'plaintext';
 
+// Template files aren't a real project (no node_modules), so module-resolution
+// diagnostics ("Cannot find module 'react'", missing type decls, etc.) are
+// noise. Silence those but keep genuine syntax/semantic checks.
+const MODULE_NOISE_CODES = [
+    2307, // Cannot find module 'x' or its type declarations
+    2792, // Cannot find module — did you mean to set 'moduleResolution'?
+    7016, // Could not find a declaration file for module 'x'
+    2305, // Module 'x' has no exported member 'y'
+    2306, // File is not a module
+    6142, // Module resolved but '--jsx' is not set
+    2686, // 'X' refers to a UMD global but the file is a module
+    1479, // top-level await / esm interop noise
+    2875, // This JSX tag requires the module path 'react/jsx-runtime' to exist
+    2874, // This JSX tag requires 'react/jsx-dev-runtime'
+    2307, // (repeat) cannot find module
+];
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const configureMonaco = (monaco: any) => {
+    const ts = monaco.languages.typescript;
+    const compilerOptions = {
+        target: ts.ScriptTarget.ESNext,
+        allowJs: true,
+        checkJs: false,
+        jsx: ts.JsxEmit.ReactJSX,
+        module: ts.ModuleKind.ESNext,
+        moduleResolution: ts.ModuleResolutionKind.NodeJs,
+        esModuleInterop: true,
+        allowNonTsExtensions: true,
+        noEmit: true,
+        skipLibCheck: true,
+    };
+    const diag = { diagnosticCodesToIgnore: MODULE_NOISE_CODES, noSemanticValidation: false, noSyntaxValidation: false };
+    ts.typescriptDefaults.setCompilerOptions(compilerOptions);
+    ts.typescriptDefaults.setDiagnosticsOptions(diag);
+    ts.javascriptDefaults.setCompilerOptions(compilerOptions);
+    ts.javascriptDefaults.setDiagnosticsOptions(diag);
+};
+
 interface OpenTab {
     path: string;
     name: string;
@@ -380,6 +419,7 @@ export function EditorView({ target, targetKey, notify, onDirtyChange }: Props) 
                     ) : (
                         <Editor
                             theme="vs-dark"
+                            beforeMount={configureMonaco}
                             path={`${targetKey}/${current.path}`}
                             language={langOf(current.path)}
                             value={current.content}
