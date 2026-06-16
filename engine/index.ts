@@ -4,6 +4,7 @@ export * from './manifest';
 export * from './tokens';
 export * from './publish';
 export * from './zip';
+export * from './dotnet';
 export * from './registry';
 export * from './features';
 export * from './overlay';
