@@ -20,7 +20,6 @@ __exportStar(require("./manifest"), exports);
 __exportStar(require("./tokens"), exports);
 __exportStar(require("./publish"), exports);
 __exportStar(require("./zip"), exports);
-__exportStar(require("./dotnet"), exports);
 __exportStar(require("./registry"), exports);
 __exportStar(require("./features"), exports);
 __exportStar(require("./overlay"), exports);

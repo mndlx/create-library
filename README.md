@@ -1,93 +1,150 @@
 # virtuallab-create-library
 
-A front-end for the standard **`dotnet new`** template engine. It discovers
-`dotnet new` templates, lets you edit their files and parameters in a
-React/MUI web back-office (Visual-Studio-style Solution Explorer + Monaco
-editor), and generates projects by shelling out to the .NET CLI — so the output
-is exactly what `dotnet new` produces.
+A manifest-driven scaffolding system. It generates projects from **templates**,
+replaces **dynamic tokens** (`@@name@@`) with user-entered values across file
+contents *and* file names, supports conditional **features**, and ships a
+React/MUI web **back-office** to author, configure, version and publish
+templates so they can be reused across apps.
 
-Requires the **.NET SDK** on `PATH` (`dotnet`). Full docs in [`docs/`](docs/README.md).
+Full docs live in [`docs/`](docs/README.md).
 
 ## Generate a project (CLI)
 
 ```bash
-npm run dev            # bin/generate.js — pick a template, answer parameters
+npx virtuallab-create-library
 ```
 
-Discovers templates under the registered directories, asks for the project
-**name** (`-n`) and each parameter (the manifest's `symbols`), asks whether to
-nest the output in a `<name>/` subfolder, then runs `dotnet new`.
+It discovers the available templates (including the latest **published**
+version of each), asks the template's questions, lets you toggle its features,
+and writes the configured project — every placeholder replaced.
 
-Flags: `--template <shortName>` / `-t`, `--name <n>` / `-n`, `--into <dir>` / `-o`,
-`--flat` (don't create a `<name>` subfolder), `--force`, `--yes` / `-y`.
+Flags:
+
+- `--yes` / `-y` — accept defaults, no prompts
+- `--save-preset <file>` / `--preset <file>` — save / reuse a configuration
+- `--into <dir>` — target directory (defaults to the current directory)
+- `--merge` / `--new` — force the output mode (otherwise the template decides)
+- `--force` — in merge mode, overwrite conflicting files
 
 ## Back-office (web)
 
 ```bash
-npm run bo:web         # or: npx virtuallab-create-library-bo-web
+npm run bo:web        # or: npx virtuallab-create-library-bo-web
 ```
 
 Starts a local server on http://localhost:4517 (next free port if busy;
 override with `PORT=5000`). Dark-theme single-page app:
 
-- **Solution Explorer** (left) — registered template directories as
-  *containers*, the `dotnet new` templates inside them as *projects*, expand a
-  project to its files. Clicking a file opens it in the editor.
-- **Editor** (center) — VSCode-style Monaco editor: tabs, save (`Ctrl+S`),
-  new/rename/delete/move with confirmation, drag-and-drop.
-- **Right panel** — tabbed for the selected template:
-  - *Parameters* — the manifest `symbols`: datatype (string/bool/choice),
-    default, and **Replaces** (the literal token the value substitutes).
-    Edits auto-save to `template.json`.
-  - *Generate* — set the name and parameter values, pick a target folder and
-    whether to create a `<name>/` subfolder, run `dotnet new`.
-  - *Settings* — short name, display name, source name, author, tags;
-    rename / validate / delete.
-- **New template** — scaffold a `.template.config/template.json` skeleton.
-- **Open folder…** — register/browse any directory; templates inside it appear.
+- **Editor** (center) — VSCode-style Monaco editor over the template's files:
+  resizable explorer, drag-and-drop move, selection-aware create,
+  rename/delete with confirmation, dirty-state guards.
+- **Right panel** — everything about the selected template:
+  - *Template settings* — title, description, version, output mode, validate.
+  - *Variables* — configurable token delimiters and an inspector of
+    **auto-detected** tokens (question, default, type, CLI exposure) with
+    auto-save and a mismatch warning when files use different delimiters.
+  - *Export* — fill the variable values and produce output with every
+    placeholder replaced (new folder, or merge into an existing project).
+  - *Publish to registry* — bump (patch/minor/major) and snapshot the template
+    (placeholders intact) into the local registry the CLI consumes.
+  - *Components & dirs* — component scaffolding, external template dirs.
+- **New template** — scaffold from samples or **import any directory** as a
+  template payload (`node_modules`/`.git` excluded, tokens auto-detected).
+- **Open folder…** — edit any directory as a workspace, no manifest needed.
 
 ## How a template works
 
-A template is a folder with `.template.config/template.json` (the
-[schemastore "template" schema](http://json.schemastore.org/template)):
+A template is a folder with a `template.json` manifest, a payload (in a
+`template/` subfolder, or flat at the root with `"source": "."`), and optional
+feature overlays:
+
+```
+my-template/
+  template.json
+  template/            # base payload, always copied
+  features/
+    storybook/         # overlay copied only when the feature is enabled
+    tests/
+```
+
+Generation: copy the base payload → overlay each enabled feature → resolve
+`/* inject:<marker> */` snippets → merge `package.json` (base + features) →
+replace dynamic tokens across every text file and path → run hooks.
+
+### Dynamic tokens
+
+Wrap a token in the template's delimiters — `@@…@@` by default, configurable
+per template via `tokenConfig` (templates without one use the legacy `__…__`).
+Tokens are auto-detected from file contents and names, so a payload like
+`src/components/@@NAME@@/@@NAME@@.tsx` becomes `src/components/Card/Card.tsx`.
+Each token carries metadata (question, default, type) and an `exposeCli` flag —
+when `false`, the CLI uses the default instead of asking.
+
+### Output mode
+
+- `"new"` (default) — create a brand-new project folder named after a variable.
+- `"merge"` — integrate into an **existing project**: files are copied in
+  (existing files kept unless `--force`), and the template's dependencies and
+  scripts are merged into the project's `package.json`.
+
+### Manifest
 
 ```jsonc
 {
-  "$schema": "http://json.schemastore.org/template",
-  "author": "you",
-  "identity": "Acme.Lib",
-  "name": "Acme Library",
-  "shortName": "acme-lib",
-  "tags": { "language": "C#", "type": "project" },
-  "sourceName": "MyProject",          // renamed by `dotnet new -n <name>`
-  "symbols": {
-    "Framework": {
-      "type": "parameter", "datatype": "choice",
-      "choices": [{ "choice": "net8.0" }, { "choice": "net10.0" }],
-      "defaultValue": "net10.0", "replaces": "TARGET_FW"
+  "name": "my-template",
+  "version": "1.0.0",
+  "tokenConfig": { "start": "@@", "end": "@@" },
+  "nameVar": "name",
+  "prompts": [
+    { "name": "name", "message": "Project name", "type": "text",
+      "default": "my-app", "token": "REPLACE", "validate": "packageName",
+      "exposeCli": true }
+  ],
+  "features": [
+    {
+      "id": "storybook", "label": "Include Storybook",
+      "type": "boolean", "default": true,
+      "overlay": "features/storybook",
+      "packageJson": { "devDependencies": { "storybook": "^8.3.0" } }
     },
-    "Greeting": { "type": "parameter", "datatype": "string", "defaultValue": "Hello", "replaces": "GREETING" }
-  }
+    {
+      "id": "styling", "label": "Styling", "type": "select",
+      "options": ["mui", "css"], "default": "mui",
+      "variants": {
+        "mui": { "overlay": "features/styling-mui" },
+        "css": { "overlay": "features/styling-css" }
+      }
+    }
+  ],
+  "nextSteps": ["cd @@REPLACE@@", "npm install"]
 }
 ```
 
-Generation = `dotnet new install <dir> → dotnet new <shortName> -o <out> -n
-<name> [--<symbol> <value>] → dotnet new uninstall`.
+A feature can contribute an **overlay** (files), a **packageJson** patch,
+**inject** snippets (at `/* inject:<marker> */` markers), and **tokens**.
+
+## Versioning & publishing
+
+From the back-office, *Publish to registry* exports a versioned snapshot of a
+template into `~/.virtuallab-create-library/published/<name>/<version>/`
+(optionally bumping `version` first). The CLI and the back-office discover the
+**latest** published version of each template automatically; a local working
+copy with the same name takes precedence.
 
 ## Where templates live
 
-Discovered from: the bundled `templates/` directory, the `VLCL_TEMPLATES_DIR`
-environment variable (OS path-delimiter separated), and directories registered
-in `~/.virtuallab-create-library.json`. A registered directory may itself be a
-template (hold `.template.config`) or be a parent of several. First `shortName`
-wins.
+Discovered, in order, from: the bundled `templates/` directory, the
+`VLCL_TEMPLATES_DIR` environment variable (OS path-delimiter separated),
+directories saved in `~/.virtuallab-create-library.json` (a registered
+directory may also *be* a template itself), and the published registry.
+First name wins.
 
 ## Architecture
 
-The engine (`engine/dotnet.ts`) is the dotnet adapter: discover/parse
-templates, expose symbols, generate via the CLI, scaffold a skeleton. The
-generate CLI (`bin/generate.ts`) and the web back-office server
-(`bin/bo-web.ts`) are thin layers over it.
+The engine (`engine/`) is UI-free and reusable: manifest load/validate,
+discovery, token detection/replacement, feature resolution, overlay + inject,
+package.json merge, presets, scaffolding/import, publishing. The CLIs and the
+web back-office are thin layers on top.
 
 ## Development
 

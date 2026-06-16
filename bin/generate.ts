@@ -1,128 +1,212 @@
 #!/usr/bin/env node
+import * as fs from 'fs';
 import * as path from 'path';
-import { cancel, confirm, intro, isCancel, log, note, outro, select, spinner, text } from '@clack/prompts';
+import { intro, isCancel, cancel, log, note, outro, select, spinner } from '@clack/prompts';
 import pc from 'picocolors';
 import {
-    DotnetTemplate,
-    generateDotnet,
-    listDotnetTemplatesIn,
-    resolveTemplateDirs,
+    GenerationConfig,
+    LoadedTemplate,
+    defaultSelection,
+    findTemplate,
+    generate,
+    listTemplates,
+    loadPreset,
+    mergeInto,
+    nameVarOf,
+    outputModeOf,
+    renderNextSteps,
+    resolveVariables,
+    runFeatureSelection,
+    runTemplatePrompts,
+    savePreset,
+    tokenConfigOf,
+    tokensFromAnswers,
+    withDefaults,
 } from '../engine';
 
 interface Args {
     template?: string;
+    preset?: string;
+    savePreset?: string;
     into?: string;
-    name?: string;
+    mode?: 'new' | 'merge';
     force: boolean;
     yes: boolean;
-    flat: boolean;
 }
 
 const parseArgs = (argv: string[]): Args => {
-    const args: Args = { force: false, yes: false, flat: false };
+    const args: Args = { yes: false, force: false };
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
         if (a === '--template' || a === '-t') args.template = argv[++i];
-        else if (a === '--into' || a === '-o') args.into = argv[++i];
-        else if (a === '--name' || a === '-n') args.name = argv[++i];
+        else if (a === '--preset') args.preset = argv[++i];
+        else if (a === '--save-preset') args.savePreset = argv[++i];
+        else if (a === '--into') args.into = argv[++i];
+        else if (a === '--merge') args.mode = 'merge';
+        else if (a === '--new') args.mode = 'new';
         else if (a === '--force') args.force = true;
-        else if (a === '--flat') args.flat = true; // do NOT create a <name> subfolder
         else if (a === '--yes' || a === '-y') args.yes = true;
     }
     return args;
 };
 
-const bail = (): never => { cancel('Cancelled.'); process.exit(1); };
+const modeBadge = (mode: 'new' | 'merge'): string =>
+    mode === 'merge' ? pc.bgYellow(pc.black(' MERGE ')) : pc.bgGreen(pc.black(' NEW '));
 
-const listTemplates = (): DotnetTemplate[] => {
-    const out: DotnetTemplate[] = [];
-    const seen = new Set<string>();
-    for (const root of resolveTemplateDirs()) {
-        for (const t of listDotnetTemplatesIn(root)) {
-            if (!seen.has(t.shortName)) { seen.add(t.shortName); out.push(t); }
+async function pickTemplate(templates: LoadedTemplate[], wanted?: string): Promise<LoadedTemplate> {
+    if (wanted) {
+        const found = findTemplate(wanted);
+        if (!found) {
+            log.error(`Unknown template: ${wanted}`);
+            log.info(`Available: ${templates.map((t) => t.manifest.name).join(', ')}`);
+            process.exit(1);
         }
+        return found;
     }
-    return out;
+    if (templates.length === 1) return templates[0];
+
+    const value = await select({
+        message: 'Pick a template',
+        options: templates.map((t) => ({
+            value: t.manifest.name,
+            label: `${t.manifest.name}@${t.manifest.version ?? '1.0.0'}`,
+            hint: `${outputModeOf(t)}${t.manifest.title && t.manifest.title !== t.manifest.name ? ' · ' + t.manifest.title : ''}`,
+        })),
+    });
+    if (isCancel(value)) {
+        cancel('Cancelled.');
+        process.exit(1);
+    }
+    return findTemplate(String(value))!;
+}
+
+/** Card summarizing what was selected. */
+const printTemplateCard = (t: LoadedTemplate) => {
+    const m = t.manifest;
+    const cfg = tokenConfigOf(t);
+    const vars = resolveVariables(t);
+    const lines = [
+        `${pc.bold(m.title ?? m.name)} ${pc.dim(`v${m.version ?? '1.0.0'}`)}  ${modeBadge(outputModeOf(t))}`,
+        ...(m.description ? [pc.dim(m.description)] : []),
+        pc.dim(`tokens ${cfg.start}…${cfg.end} · ${vars.length} variable(s) · ${(m.features ?? []).length} feature(s)`),
+    ];
+    note(lines.join('\n'), 'Template');
+};
+
+const featureSummary = (features: Record<string, boolean | string>): string =>
+    Object.entries(features)
+        .filter(([, v]) => v !== false && v !== '')
+        .map(([k, v]) => (v === true ? k : `${k}=${v}`))
+        .join(', ');
+
+/** Warn about tokens that would be replaced with an empty string. */
+const warnEmptyTokens = (template: LoadedTemplate, answers: Record<string, string>) => {
+    const tokens = tokensFromAnswers(template, answers);
+    const empty = Object.entries(tokens).filter(([, v]) => v === '').map(([k]) => k);
+    if (!empty.length) return;
+    const cfg = tokenConfigOf(template);
+    log.warn(
+        `empty value for: ${empty.map((tk) => pc.magenta(`${cfg.start}${tk}${cfg.end}`)).join(', ')}` +
+        pc.dim('  (they will be replaced with nothing)')
+    );
 };
 
 async function main() {
     const args = parseArgs(process.argv.slice(2));
-    intro(pc.bgCyan(pc.black(' create-library ')) + pc.dim('  generate from a dotnet template'));
+    intro(pc.bgCyan(pc.black(' create-library ')) + pc.dim('  scaffold projects from tokenized templates'));
 
     const templates = listTemplates();
     if (!templates.length) {
-        log.error('No dotnet templates found (looked for .template.config/template.json).');
-        log.info('Create one in the back-office: npm run bo:web');
+        log.error('No templates found. Create one with the back-office: npm run bo:web');
         process.exit(1);
     }
 
-    let template: DotnetTemplate | undefined;
-    if (args.template) {
-        template = templates.find((t) => t.shortName === args.template);
-        if (!template) { log.error(`Unknown template: ${args.template}`); log.info(`Available: ${templates.map((t) => t.shortName).join(', ')}`); process.exit(1); }
-    } else if (templates.length === 1) {
-        template = templates[0];
-    } else {
-        const v = await select({
-            message: 'Pick a template',
-            options: templates.map((t) => ({ value: t.shortName, label: t.shortName, hint: t.name !== t.shortName ? t.name : undefined })),
-        });
-        if (isCancel(v)) bail();
-        template = templates.find((t) => t.shortName === String(v))!;
-    }
+    let template: LoadedTemplate;
+    let config: GenerationConfig;
 
-    note(`${pc.bold(template.name)} ${pc.dim(template.shortName)}\n${pc.dim(`${template.symbols.length} parameter(s)`)}`, 'Template');
-
-    // Name (-n).
-    let name = args.name ?? template.sourceName ?? template.shortName;
-    if (!args.yes && !args.name) {
-        const v = await text({ message: 'Project name (-n)', defaultValue: name, placeholder: name });
-        if (isCancel(v)) bail();
-        name = String(v || name);
-    }
-
-    // Parameter values.
-    const params: Record<string, string> = {};
-    for (const s of template.symbols) {
-        if (args.yes) { if (s.defaultValue !== undefined) params[s.name] = s.defaultValue; continue; }
-        if (s.datatype === 'bool') {
-            const v = await confirm({ message: `${s.name}${s.description ? ` — ${s.description}` : ''}`, initialValue: s.defaultValue === 'true' });
-            if (isCancel(v)) bail();
-            params[s.name] = v ? 'true' : 'false';
-        } else if (s.datatype === 'choice' && s.choices?.length) {
-            const v = await select({ message: s.name, options: s.choices.map((c) => ({ value: c })), initialValue: s.defaultValue && s.choices.includes(s.defaultValue) ? s.defaultValue : s.choices[0] });
-            if (isCancel(v)) bail();
-            params[s.name] = String(v);
-        } else {
-            const v = await text({ message: `${s.name}${s.description ? ` — ${s.description}` : ''}`, defaultValue: s.defaultValue, placeholder: s.defaultValue || '' });
-            if (isCancel(v)) bail();
-            params[s.name] = String(v ?? s.defaultValue ?? '');
+    if (args.preset) {
+        const preset = loadPreset(args.preset);
+        const found = preset.template ? findTemplate(preset.template) : undefined;
+        if (!found) {
+            log.error(`Preset references unknown template: ${preset.template}`);
+            process.exit(1);
         }
+        template = found;
+        config = withDefaults(template, preset);
+        printTemplateCard(template);
+    } else if (args.yes) {
+        template = await pickTemplate(templates, args.template);
+        config = withDefaults(template, {});
+        printTemplateCard(template);
+    } else {
+        template = await pickTemplate(templates, args.template);
+        printTemplateCard(template);
+        const answers = await runTemplatePrompts(template);
+        const features = await runFeatureSelection(template);
+        config = { answers, features };
     }
 
-    // Where + whether to nest in a <name> subfolder.
-    const base = path.resolve(args.into ?? process.cwd());
-    let subfolder = !args.flat;
-    if (!args.yes && !args.flat) {
-        const v = await confirm({ message: `Create a subfolder "${name}" inside ${base}?`, initialValue: true });
-        if (isCancel(v)) bail();
-        subfolder = !!v;
-    }
-    const outDir = subfolder ? path.join(base, name) : base;
+    const answers = config.answers ?? {};
+    const features = config.features ?? defaultSelection(template);
+    const mode = args.mode ?? outputModeOf(template);
 
-    log.step((subfolder ? pc.dim('output → ') : pc.dim('output (flat) → ')) + pc.bold(outDir));
+    if (args.savePreset) {
+        savePreset(args.savePreset, { template: template.manifest.name, answers, features });
+        log.success(`Saved preset to ${args.savePreset}`);
+    }
+
+    // ----- plan summary ---------------------------------------------------
+    const into = path.resolve(args.into ?? process.cwd());
+    const projectName = answers[nameVarOf(template)] || template.manifest.name;
+    const targetDir = mode === 'merge' ? into : path.join(into, projectName);
+
+    log.step(
+        modeBadge(mode) +
+        (mode === 'merge'
+            ? pc.dim('  merging into existing project → ') + pc.bold(targetDir)
+            : pc.dim('  creating new folder → ') + pc.bold(targetDir))
+    );
+    if (featureSummary(features)) log.info(pc.dim(`features: ${featureSummary(features)}`));
+    warnEmptyTokens(template, answers);
+    if (mode === 'merge' && !args.force) log.info(pc.dim('existing files are kept (use --force to overwrite)'));
 
     const s = process.stdout.isTTY ? spinner() : null;
-    s?.start('Running dotnet new');
+    s?.start('Working');
+
     try {
-        const output = generateDotnet({ template, outDir, name, params, force: args.force });
-        s?.stop('Done');
-        if (output.trim()) log.info(pc.dim(output.trim()));
-        outro(pc.green(`Created ${outDir}`));
+        if (mode === 'merge') {
+            if (!fs.existsSync(into)) throw new Error(`Target directory does not exist: ${into}`);
+            const { tokens, report } = mergeInto({ template, projectDir: into, answers, features, force: args.force });
+            s?.stop('Merged');
+
+            log.success(`Merged "${template.manifest.name}" into ${into}`);
+            log.info(pc.dim(`${report.created.length} file(s) added${report.packageJsonMerged ? ', package.json merged' : ''}`));
+            for (const f of report.created.slice(0, 12)) log.info(pc.green(`  + ${f}`));
+            if (report.created.length > 12) log.info(pc.dim(`  … +${report.created.length - 12} more`));
+            if (report.skipped.length) {
+                log.warn(`${report.skipped.length} existing file(s) kept (use --force to overwrite):`);
+                for (const f of report.skipped) log.warn(pc.yellow(`  = ${f}`));
+            }
+            finish(template, tokens);
+        } else {
+            const { tokens } = generate({ template, targetDir, answers, features });
+            s?.stop(`Created ${projectName}`);
+            log.success(`Created ${targetDir}`);
+            finish(template, tokens);
+        }
     } catch (err) {
         s?.stop('Failed');
         throw err;
     }
 }
 
-main().catch((err) => { log.error(err instanceof Error ? err.message : String(err)); process.exit(1); });
+const finish = (template: LoadedTemplate, tokens: Record<string, string>) => {
+    const steps = renderNextSteps(template, tokens);
+    if (steps.length) note(steps.map((st) => pc.cyan(st)).join('\n'), 'Next steps');
+    outro(pc.green('Done.'));
+};
+
+main().catch((err) => {
+    log.error(err instanceof Error ? err.message : String(err));
+    process.exit(1);
+});

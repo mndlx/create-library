@@ -2,17 +2,35 @@
 import { exec } from 'child_process';
 import * as fs from 'fs';
 import * as http from 'http';
+import * as os from 'os';
 import * as path from 'path';
 import {
-    DotnetTemplate,
+    LoadedTemplate,
+    PromptDef,
     addTemplateDir,
-    generateDotnet,
-    listDotnetTemplatesIn,
-    parseDotnetTemplate,
-    readDotnetManifest,
+    assemble,
+    detectForeignTokens,
+    exportTemplate,
+    findTemplate,
+    generate,
+    importTemplate,
+    listPublishedVersions,
+    loadManifest,
+    publishedRoot,
+    listTemplates,
+    mergeInto,
+    nameVarOf,
+    outputModeOf,
+    readRawManifest,
+    renderNextSteps,
     resolveTemplateDirs,
-    scaffoldDotnetTemplate,
-    writeDotnetManifest,
+    resolveVariables,
+    savePreset,
+    scaffoldTemplate,
+    tokenConfigOf,
+    validateManifest,
+    writeRawManifest,
+    zipDirectory,
 } from '../engine';
 
 const PORT = Number(process.env.PORT) || 4517;
@@ -40,55 +58,47 @@ const readBody = (req: http.IncomingMessage): Promise<any> =>
         req.on('error', reject);
     });
 
-/* ------------------------- dotnet template registry ---------------------- */
+const serialize = (t: LoadedTemplate) => ({
+    name: t.manifest.name,
+    title: t.manifest.title ?? t.manifest.name,
+    description: t.manifest.description ?? '',
+    output: outputModeOf(t),
+    nameVar: nameVarOf(t),
+    dir: t.dir,
+    version: t.manifest.version ?? '1.0.0',
+    prompts: t.manifest.prompts,
+    features: t.manifest.features ?? [],
+    tokenConfig: tokenConfigOf(t),
+    variables: resolveVariables(t),
+    foreignTokens: detectForeignTokens(t),
+});
 
-const listTemplates = (): DotnetTemplate[] => {
-    const out: DotnetTemplate[] = [];
-    const seen = new Set<string>();
-    for (const root of resolveTemplateDirs()) {
-        for (const t of listDotnetTemplatesIn(root)) {
-            if (seen.has(t.shortName)) continue;
-            seen.add(t.shortName);
-            out.push(t);
-        }
-    }
-    return out;
-};
-
-const requireTemplate = (name: string): DotnetTemplate => {
-    const t = listTemplates().find((x) => x.shortName === name);
+const requireTemplate = (name: string): LoadedTemplate => {
+    const t = findTemplate(name);
     if (!t) throw new Error(`Unknown template: ${name}`);
     return t;
 };
 
-const serialize = (t: DotnetTemplate) => ({
-    name: t.shortName,
-    shortName: t.shortName,
-    identity: t.identity,
-    title: t.name,
-    author: t.author ?? '',
-    sourceName: t.sourceName ?? '',
-    classifications: t.classifications,
-    tags: t.tags,
-    dir: t.dir,
-    symbols: t.symbols,
-});
-
-/* ------------------------------- file utils ----------------------------- */
-
-/** Resolve a template-relative path, refusing anything that escapes the base dir. */
+/** Resolve a template-relative path, refusing anything that escapes the template dir. */
 const safeJoin = (baseDir: string, rel: string): string => {
     const full = path.resolve(baseDir, rel || '.');
     const base = path.resolve(baseDir);
-    if (full !== base && !full.startsWith(base + path.sep)) throw new Error(`Path escapes template: ${rel}`);
+    if (full !== base && !full.startsWith(base + path.sep)) {
+        throw new Error(`Path escapes template: ${rel}`);
+    }
     return full;
 };
 
-interface FileNode { name: string; path: string; type: 'file' | 'dir'; children?: FileNode[]; }
+interface FileNode {
+    name: string;
+    path: string; // template-relative, posix separators
+    type: 'file' | 'dir';
+    children?: FileNode[];
+}
 
-const IGNORED_DIRS = new Set(['node_modules', '.git', 'dist', '.vs', 'bin', 'obj']);
+const IGNORED_DIRS = new Set(['node_modules', '.git', 'dist', '.vs']);
 
-/** Recursively list a directory's files as a tree (dirs first, alphabetical). */
+/** Recursively list a template's files as a tree (dirs first, alphabetical). */
 const buildTree = (baseDir: string, dir: string): FileNode[] => {
     const entries = fs.readdirSync(dir, { withFileTypes: true });
     const nodes: FileNode[] = [];
@@ -96,17 +106,27 @@ const buildTree = (baseDir: string, dir: string): FileNode[] => {
         if (e.isDirectory() && IGNORED_DIRS.has(e.name)) continue;
         const full = path.join(dir, e.name);
         const rel = path.relative(baseDir, full).split(path.sep).join('/');
-        if (e.isDirectory()) nodes.push({ name: e.name, path: rel, type: 'dir', children: buildTree(baseDir, full) });
-        else nodes.push({ name: e.name, path: rel, type: 'file' });
+        if (e.isDirectory()) {
+            nodes.push({ name: e.name, path: rel, type: 'dir', children: buildTree(baseDir, full) });
+        } else {
+            nodes.push({ name: e.name, path: rel, type: 'file' });
+        }
     }
-    nodes.sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'dir' ? -1 : 1));
+    nodes.sort((a, b) =>
+        a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'dir' ? -1 : 1
+    );
     return nodes;
 };
 
-/** Move `from` onto an existing `to`: same-name dirs merge, conflicting files replaced. */
+/**
+ * Move `from` onto an existing `to`: same-name directories merge recursively,
+ * conflicting files are replaced by the incoming ones.
+ */
 const moveMerge = (from: string, to: string): void => {
     if (fs.existsSync(to) && fs.statSync(from).isDirectory() && fs.statSync(to).isDirectory()) {
-        for (const entry of fs.readdirSync(from)) moveMerge(path.join(from, entry), path.join(to, entry));
+        for (const entry of fs.readdirSync(from)) {
+            moveMerge(path.join(from, entry), path.join(to, entry));
+        }
         fs.rmdirSync(from);
         return;
     }
@@ -121,7 +141,10 @@ const isProbablyBinary = (buf: Buffer): boolean => {
     return false;
 };
 
-/** Base dir for the file APIs: a registered template (by name) or any `root`. */
+/**
+ * Resolve the base directory the file APIs operate inside. Either a registered
+ * template (by name) or an arbitrary `root` directory ("open a workspace").
+ */
 const resolveBase = (q: { template?: string; root?: string }): string => {
     if (q.root && q.root.trim()) {
         const dir = path.resolve(q.root.trim());
@@ -132,48 +155,88 @@ const resolveBase = (q: { template?: string; root?: string }): string => {
     throw new Error('Provide a "template" or a "root" directory');
 };
 
-/* -------------------------------- symbols ------------------------------- */
+const componentTsx = (name: string) =>
+    `import * as React from 'react';\n\n` +
+    `export interface ${name}Props extends React.HTMLAttributes<HTMLDivElement> {}\n\n` +
+    `export const ${name} = React.forwardRef<HTMLDivElement, ${name}Props>((props, ref) => (\n` +
+    `    <div ref={ref} {...props} />\n));\n\n` +
+    `${name}.displayName = '${name}';\n`;
 
-interface SymbolInput {
-    name: string;
-    datatype?: string;
-    defaultValue?: string;
-    replaces?: string;
-    description?: string;
-    choices?: string[];
+function addComponent(t: LoadedTemplate, rawName: string, onByDefault: boolean): void {
+    const comp = String(rawName || '').trim().replace(/[^A-Za-z0-9]/g, '');
+    if (!comp) throw new Error('A component name is required');
+    const featureId = comp.toLowerCase();
+
+    const barrel = path.join(t.sourceDir, 'src', 'components', 'index.ts');
+    fs.mkdirSync(path.dirname(barrel), { recursive: true });
+    if (!fs.existsSync(barrel)) fs.writeFileSync(barrel, '/* inject:componentExports */\n');
+    else if (!fs.readFileSync(barrel, 'utf8').includes('/* inject:componentExports */')) {
+        fs.appendFileSync(barrel, '\n/* inject:componentExports */\n');
+    }
+
+    const overlayRel = path.join('features', featureId);
+    const compDir = path.join(t.dir, overlayRel, 'src', 'components', comp);
+    fs.mkdirSync(compDir, { recursive: true });
+    fs.writeFileSync(path.join(compDir, `${comp}.tsx`), componentTsx(comp));
+    fs.writeFileSync(path.join(compDir, 'index.ts'), `export * from './${comp}';\n`);
+
+    const m = readRawManifest(t.dir);
+    m.features = m.features || [];
+    if (m.features.some((f) => f.id === featureId)) throw new Error(`Feature "${featureId}" already exists`);
+    m.features.push({
+        id: featureId,
+        label: `Include the ${comp} component`,
+        type: 'boolean',
+        default: onByDefault,
+        overlay: overlayRel.split(path.sep).join('/'),
+        inject: [{ file: 'src/components/index.ts', marker: 'componentExports', content: `export * from './${comp}';` }],
+    });
+    const errors = validateManifest(m);
+    if (errors.length) throw new Error(errors.join('; '));
+    writeRawManifest(t.dir, m);
 }
 
-const writeSymbol = (dir: string, s: SymbolInput) => {
-    const m = readDotnetManifest(dir);
-    m.symbols = m.symbols || {};
-    const sym: Record<string, unknown> = { type: 'parameter', datatype: s.datatype || 'string' };
-    if (s.defaultValue !== undefined && s.defaultValue !== '') sym.defaultValue = s.defaultValue;
-    if (s.replaces) sym.replaces = s.replaces;
-    if (s.description) sym.description = s.description;
-    if (s.datatype === 'choice') sym.choices = (s.choices ?? []).filter(Boolean).map((c) => ({ choice: c }));
-    m.symbols[s.name] = sym;
-    writeDotnetManifest(dir, m);
-};
-
-/* --------------------------------- API ---------------------------------- */
-
-async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, pathname: string, query: Record<string, string>): Promise<void> {
+async function handleApi(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    pathname: string,
+    query: Record<string, string>
+): Promise<void> {
     if (req.method === 'GET' && pathname === '/api/state') {
-        return sendJson(res, 200, { templates: listTemplates().map(serialize), dirs: resolveTemplateDirs(), cwd: process.cwd() });
+        return sendJson(res, 200, {
+            templates: listTemplates().map(serialize),
+            dirs: resolveTemplateDirs(),
+            cwd: process.cwd(),
+        });
     }
 
     const body = req.method === 'POST' ? await readBody(req) : {};
 
-    // Generate a project from a dotnet template via the .NET CLI.
     if (req.method === 'POST' && pathname === '/api/generate') {
         const t = requireTemplate(body.templateName);
-        const base = path.resolve(body.into || process.cwd());
-        const name = body.name || t.sourceName || t.shortName;
-        // Optionally place output in a subfolder named after the project.
-        const outDir = body.subfolder ? path.join(base, name) : base;
-        fs.mkdirSync(outDir, { recursive: true });
-        const output = generateDotnet({ template: t, outDir, name, params: body.params || {}, force: !!body.force });
-        return sendJson(res, 200, { ok: true, into: outDir, output });
+        const answers: Record<string, string> = body.answers || {};
+        const features: Record<string, boolean | string> = body.features || {};
+        const mode = body.mode || outputModeOf(t);
+        const into = path.resolve(body.into || process.cwd());
+
+        const includeManifest = !!body.includeManifest;
+
+        if (mode === 'merge') {
+            fs.mkdirSync(into, { recursive: true }); // merging into a fresh folder is fine
+            const { tokens, report } = mergeInto({ template: t, projectDir: into, answers, features, force: !!body.force, includeManifest });
+            return sendJson(res, 200, { ok: true, mode, into, report, nextSteps: renderNextSteps(t, tokens) });
+        }
+        const name = answers[nameVarOf(t)] || t.manifest.name;
+        const targetDir = path.join(into, name);
+        const { tokens } = generate({ template: t, targetDir, answers, features, includeManifest });
+        return sendJson(res, 200, { ok: true, mode, targetDir, nextSteps: renderNextSteps(t, tokens) });
+    }
+
+    if (req.method === 'POST' && pathname === '/api/preset') {
+        const t = requireTemplate(body.templateName);
+        const file = path.resolve(body.file || `${t.manifest.name}.preset.json`);
+        savePreset(file, { template: t.manifest.name, answers: body.answers || {}, features: body.features || {} });
+        return sendJson(res, 200, { ok: true, file });
     }
 
     if (req.method === 'POST' && pathname === '/api/create-template') {
@@ -181,66 +244,183 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, pa
         if (!name) throw new Error('A template name is required');
         const rootDir = path.resolve(body.rootDir && String(body.rootDir).trim() ? body.rootDir : process.cwd());
         fs.mkdirSync(rootDir, { recursive: true });
-        const dir = scaffoldDotnetTemplate({
-            rootDir, name,
-            shortName: body.shortName ? String(body.shortName) : undefined,
-            author: body.author ? String(body.author) : undefined,
-            sourceName: body.sourceName ? String(body.sourceName) : undefined,
-        });
+        const opts = {
+            rootDir,
+            name,
+            title: body.title,
+            description: body.description,
+            output: (body.output === 'merge' ? 'merge' : 'new') as 'new' | 'merge',
+            source: body.source === '.' ? '.' : 'template',
+        };
+        // If importFrom is given, copy that directory as the payload; else scaffold samples.
+        const dir = body.importFrom && String(body.importFrom).trim()
+            ? importTemplate({ ...opts, importFrom: String(body.importFrom).trim() })
+            : scaffoldTemplate(opts);
+        // Make the new template discoverable by registering its parent directory.
         if (!resolveTemplateDirs().includes(rootDir)) addTemplateDir(rootDir);
-        const created = parseDotnetTemplate(dir);
-        return sendJson(res, 200, { ok: true, dir, name: created.shortName });
+        return sendJson(res, 200, { ok: true, dir, name });
     }
 
-    // Edit manifest metadata.
-    if (req.method === 'POST' && pathname === '/api/set-meta') {
+    if (req.method === 'POST' && pathname === '/api/add-variable') {
         const t = requireTemplate(body.templateName);
-        const m = readDotnetManifest(t.dir);
-        if (body.title !== undefined) m.name = String(body.title);
-        if (body.author !== undefined) m.author = String(body.author);
-        if (body.sourceName !== undefined) m.sourceName = String(body.sourceName);
-        if (body.classifications !== undefined) m.classifications = String(body.classifications).split(',').map((s: string) => s.trim()).filter(Boolean);
-        writeDotnetManifest(t.dir, m);
+        const m = readRawManifest(t.dir);
+        m.prompts = m.prompts || [];
+        m.prompts.push(body.prompt as PromptDef);
+        const errors = validateManifest(m);
+        if (errors.length) throw new Error(errors.join('; '));
+        writeRawManifest(t.dir, m);
         return sendJson(res, 200, { ok: true });
     }
 
-    // Rename: change shortName/identity and, when the folder matches, rename it.
+    // Rename a template: update the manifest name and, when the folder is
+    // named after the template, rename the folder too.
     if (req.method === 'POST' && pathname === '/api/rename-template') {
         const t = requireTemplate(body.templateName);
         const newName = String(body.newName || '').trim();
         if (!newName) throw new Error('A new name is required');
-        if (newName !== t.shortName && listTemplates().some((x) => x.shortName === newName)) throw new Error(`A template "${newName}" already exists`);
-        const m = readDotnetManifest(t.dir);
-        m.shortName = newName;
-        if (!m.identity || m.identity === t.identity) m.identity = newName;
-        writeDotnetManifest(t.dir, m);
+        if (newName !== t.manifest.name && findTemplate(newName)) throw new Error(`A template named "${newName}" already exists`);
+        const m = readRawManifest(t.dir);
+        m.name = newName;
+        const errors = validateManifest(m);
+        if (errors.length) throw new Error(errors.join('; '));
+        writeRawManifest(t.dir, m);
         let dir = t.dir;
-        if (path.basename(t.dir) === t.shortName) {
+        if (path.basename(t.dir) === body.templateName) {
             const dest = path.join(path.dirname(t.dir), newName);
-            if (!fs.existsSync(dest)) { fs.renameSync(t.dir, dest); dir = dest; }
+            if (!fs.existsSync(dest)) {
+                fs.renameSync(t.dir, dest);
+                dir = dest;
+            }
         }
         return sendJson(res, 200, { ok: true, name: newName, dir });
     }
 
+    // Delete a template's working copy (and optionally its published versions).
     if (req.method === 'POST' && pathname === '/api/delete-template') {
         const t = requireTemplate(body.templateName);
         fs.rmSync(t.dir, { recursive: true, force: true });
+        if (body.deletePublished) {
+            fs.rmSync(path.join(publishedRoot(), t.manifest.name), { recursive: true, force: true });
+        }
         return sendJson(res, 200, { ok: true });
     }
 
-    if (req.method === 'POST' && pathname === '/api/set-symbol') {
+    // Update manifest metadata (title, description, version, output).
+    if (req.method === 'POST' && pathname === '/api/set-meta') {
         const t = requireTemplate(body.templateName);
-        const s = body.symbol as SymbolInput;
-        if (!s || !s.name || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(s.name)) throw new Error('A valid symbol name is required');
-        writeSymbol(t.dir, s);
+        const m = readRawManifest(t.dir);
+        if (body.title !== undefined) m.title = String(body.title);
+        if (body.description !== undefined) m.description = String(body.description);
+        if (body.version !== undefined) m.version = String(body.version);
+        if (body.output !== undefined) m.output = body.output === 'merge' ? 'merge' : 'new';
+        const errors = validateManifest(m);
+        if (errors.length) throw new Error(errors.join('; '));
+        writeRawManifest(t.dir, m);
         return sendJson(res, 200, { ok: true });
     }
 
-    if (req.method === 'POST' && pathname === '/api/remove-symbol') {
+    // Export (publish) a snapshot of the template into the local registry.
+    if (req.method === 'POST' && pathname === '/api/export') {
         const t = requireTemplate(body.templateName);
-        const m = readDotnetManifest(t.dir);
-        if (m.symbols) delete m.symbols[String(body.name)];
-        writeDotnetManifest(t.dir, m);
+        const bump = ['patch', 'minor', 'major'].includes(body.bump) ? body.bump : undefined;
+        const result = exportTemplate(t, { bump, overwrite: !!body.overwrite });
+        return sendJson(res, 200, { ok: true, ...result });
+    }
+
+    if (req.method === 'GET' && pathname === '/api/published') {
+        return sendJson(res, 200, { ok: true, versions: listPublishedVersions(query.template || undefined) });
+    }
+
+    // The latest published snapshot of a template, serialized like /api/state entries.
+    if (req.method === 'GET' && pathname === '/api/published-template') {
+        const pub = listPublishedVersions(query.template || '')[0];
+        if (!pub) return sendJson(res, 200, { ok: true, published: null });
+        return sendJson(res, 200, { ok: true, published: serialize(loadManifest(pub.dir)) });
+    }
+
+    // Export: generate from the latest PUBLISHED snapshot with the given values
+    // and stream the result as a zip (same engine path the CLI generation uses).
+    if (req.method === 'POST' && pathname === '/api/export-zip') {
+        const name = String(body.templateName || '');
+        const pub = listPublishedVersions(name)[0];
+        if (!pub) throw new Error(`No published version of "${name}". Publish one first.`);
+        const t = loadManifest(pub.dir);
+        const stagingRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'vlcl-zip-'));
+        const tree = path.join(stagingRoot, 'tree');
+        try {
+            assemble(t, tree, body.answers || {}, body.features || {}, !!body.includeManifest);
+            const zip = zipDirectory(tree);
+            res.writeHead(200, {
+                'Content-Type': 'application/zip',
+                'Content-Disposition': `attachment; filename="${pub.name}-${pub.version}.zip"`,
+                'Cache-Control': 'no-store',
+            });
+            res.end(zip);
+        } finally {
+            fs.rmSync(stagingRoot, { recursive: true, force: true });
+        }
+        return;
+    }
+
+    if (req.method === 'POST' && pathname === '/api/set-token-config') {
+        const t = requireTemplate(body.templateName);
+        const start = String(body.start ?? '').trim();
+        const end = String(body.end ?? '').trim();
+        if (!start || !end) throw new Error('start and end delimiters are required');
+        const m = readRawManifest(t.dir);
+        m.tokenConfig = { start, end };
+        const errors = validateManifest(m);
+        if (errors.length) throw new Error(errors.join('; '));
+        writeRawManifest(t.dir, m);
+        return sendJson(res, 200, { ok: true });
+    }
+
+    // Upsert a token's metadata (message, default, type, options, validate, exposeCli).
+    if (req.method === 'POST' && pathname === '/api/set-variable') {
+        const t = requireTemplate(body.templateName);
+        const v = body.variable as PromptDef & { exposeCli?: boolean };
+        if (!v || !v.name) throw new Error('variable.name is required');
+        const m = readRawManifest(t.dir);
+        m.prompts = m.prompts || [];
+        const token = v.token || v.name;
+        const idx = m.prompts.findIndex((p) => (p.token || p.name) === token);
+        const next: PromptDef = {
+            name: v.name,
+            message: v.message || v.name,
+            type: v.type === 'select' ? 'select' : 'text',
+            token,
+            default: v.default,
+            validate: v.validate,
+            options: v.type === 'select' ? v.options : undefined,
+            exposeCli: v.exposeCli !== false,
+        };
+        if (idx >= 0) m.prompts[idx] = next;
+        else m.prompts.push(next);
+        const errors = validateManifest(m);
+        if (errors.length) throw new Error(errors.join('; '));
+        writeRawManifest(t.dir, m);
+        return sendJson(res, 200, { ok: true });
+    }
+
+    if (req.method === 'POST' && pathname === '/api/remove-variable') {
+        const t = requireTemplate(body.templateName);
+        const m = readRawManifest(t.dir);
+        const token = String(body.token || '');
+        m.prompts = (m.prompts || []).filter((p) => (p.token || p.name) !== token);
+        writeRawManifest(t.dir, m);
+        return sendJson(res, 200, { ok: true });
+    }
+
+    if (req.method === 'POST' && pathname === '/api/add-component') {
+        addComponent(requireTemplate(body.templateName), body.component, !!body.default);
+        return sendJson(res, 200, { ok: true });
+    }
+
+    if (req.method === 'POST' && pathname === '/api/set-output') {
+        const t = requireTemplate(body.templateName);
+        const m = readRawManifest(t.dir);
+        m.output = body.output === 'merge' ? 'merge' : 'new';
+        writeRawManifest(t.dir, m);
         return sendJson(res, 200, { ok: true });
     }
 
@@ -250,16 +430,14 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, pa
 
     if (req.method === 'POST' && pathname === '/api/validate') {
         const t = requireTemplate(body.templateName);
-        const errors: string[] = [];
-        try { parseDotnetTemplate(t.dir); } catch (e) { errors.push((e as Error).message); }
-        if (!t.shortName) errors.push('shortName is required');
-        return sendJson(res, 200, { ok: true, errors });
+        return sendJson(res, 200, { ok: true, errors: validateManifest(readRawManifest(t.dir)) });
     }
 
-    // Directory browser for folder pickers.
+    // Directory browser for folder pickers: list subdirectories of a path.
     if (req.method === 'GET' && pathname === '/api/fs/dirs') {
         const raw = (query.path || '').trim();
         if (!raw) {
+            // Roots: drive letters on Windows, '/' elsewhere.
             if (process.platform === 'win32') {
                 const drives: string[] = [];
                 for (let c = 65; c <= 90; c++) {
@@ -272,7 +450,8 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, pa
         }
         const dir = path.resolve(raw);
         if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) throw new Error(`Not a directory: ${dir}`);
-        const dirs = fs.readdirSync(dir, { withFileTypes: true })
+        const dirs = fs
+            .readdirSync(dir, { withFileTypes: true })
             .filter((e) => e.isDirectory() && !e.name.startsWith('.') && e.name !== 'node_modules')
             .map((e) => e.name)
             .sort((a, b) => a.localeCompare(b));
@@ -287,7 +466,7 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, pa
         return sendJson(res, 200, { ok: true, dir });
     }
 
-    // ---- File explorer / editor APIs ----
+    // ---- File explorer / editor APIs (operate inside a template's directory) ----
 
     if (req.method === 'GET' && pathname === '/api/files') {
         const base = resolveBase(query);
@@ -316,14 +495,20 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, pa
         const full = safeJoin(base, body.path || '');
         if (fs.existsSync(full)) {
             const isDir = fs.statSync(full).isDirectory();
+            // A folder that already exists can never be "overwritten" by a new one;
+            // a file can, but only with the explicit overwrite flag.
             if (body.dir || isDir || !body.overwrite) {
                 throw new Error(isDir ? 'A folder with this name already exists here' : 'A file with this name already exists here');
             }
             fs.writeFileSync(full, String(body.content ?? ''));
             return sendJson(res, 200, { ok: true, overwritten: true });
         }
-        if (body.dir) fs.mkdirSync(full, { recursive: true });
-        else { fs.mkdirSync(path.dirname(full), { recursive: true }); fs.writeFileSync(full, String(body.content ?? '')); }
+        if (body.dir) {
+            fs.mkdirSync(full, { recursive: true });
+        } else {
+            fs.mkdirSync(path.dirname(full), { recursive: true });
+            fs.writeFileSync(full, String(body.content ?? ''));
+        }
         return sendJson(res, 200, { ok: true });
     }
 
@@ -354,9 +539,18 @@ async function handleApi(req: http.IncomingMessage, res: http.ServerResponse, pa
 }
 
 const CONTENT_TYPES: Record<string, string> = {
-    '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css',
-    '.json': 'application/json', '.svg': 'image/svg+xml', '.map': 'application/json',
-    '.woff': 'font/woff', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.png': 'image/png', '.ico': 'image/x-icon',
+    '.html': 'text/html',
+    '.js': 'text/javascript',
+    '.mjs': 'text/javascript',
+    '.css': 'text/css',
+    '.json': 'application/json',
+    '.svg': 'image/svg+xml',
+    '.map': 'application/json',
+    '.woff': 'font/woff',
+    '.woff2': 'font/woff2',
+    '.ttf': 'font/ttf',
+    '.png': 'image/png',
+    '.ico': 'image/x-icon',
 };
 
 function serveStatic(res: http.ServerResponse, pathname: string): void {
@@ -367,8 +561,14 @@ function serveStatic(res: http.ServerResponse, pathname: string): void {
         res.end('Not found');
         return;
     }
+    // Files under assets/ are content-hashed by Vite, so they're immutable; the
+    // entry HTML must always revalidate so a rebuild's new bundle is picked up
+    // without a manual hard-refresh.
     const cache = /^assets\//.test(rel) ? 'public, max-age=31536000, immutable' : 'no-store';
-    res.writeHead(200, { 'Content-Type': CONTENT_TYPES[path.extname(full)] || 'application/octet-stream', 'Cache-Control': cache });
+    res.writeHead(200, {
+        'Content-Type': CONTENT_TYPES[path.extname(full)] || 'application/octet-stream',
+        'Cache-Control': cache,
+    });
     res.end(fs.readFileSync(full));
 }
 
@@ -386,11 +586,18 @@ const announce = (port: number) => {
     const url = `http://localhost:${port}`;
     console.log(`create-library back-office (web) → ${url}`);
     if (!process.env.NO_OPEN) {
-        const opener = process.platform === 'win32' ? `start "" "${url}"` : process.platform === 'darwin' ? `open "${url}"` : `xdg-open "${url}"`;
+        const opener =
+            process.platform === 'win32' ? `start "" "${url}"` :
+            process.platform === 'darwin' ? `open "${url}"` :
+            `xdg-open "${url}"`;
         exec(opener, () => {});
     }
 };
 
+/**
+ * Listen on PORT; if it's taken, try the next ports automatically. When PORT is
+ * set explicitly via the environment we don't shift it (the user asked for it).
+ */
 const start = (port: number, attemptsLeft: number): void => {
     server.once('error', (err: NodeJS.ErrnoException) => {
         if (err.code === 'EADDRINUSE' && attemptsLeft > 0 && !process.env.PORT) {
@@ -399,11 +606,14 @@ const start = (port: number, attemptsLeft: number): void => {
         } else if (err.code === 'EADDRINUSE') {
             console.error(`Port ${port} is in use. Set PORT to a free port and retry.`);
             process.exit(1);
-        } else { throw err; }
+        } else {
+            throw err;
+        }
     });
     server.listen(port, '127.0.0.1');
 };
 
+// One persistent handler so a failed attempt's callback can't fire on a later bind.
 server.on('listening', () => {
     const addr = server.address();
     announce(typeof addr === 'object' && addr ? addr.port : PORT);

@@ -41,11 +41,9 @@ interface Props {
     notify: (msg: string, sev?: 'success' | 'error' | 'info') => void;
     /** Reports how many open files have unsaved changes. */
     onDirtyChange?: (count: number) => void;
-    /** External request to open a file (from the solution tree). Bump nonce to re-trigger. */
-    openRequest?: { path: string; nonce: number } | null;
 }
 
-export function EditorView({ target, targetKey, notify, onDirtyChange, openRequest }: Props) {
+export function EditorView({ target, targetKey, notify, onDirtyChange }: Props) {
     const { prompt, confirm } = useDialogs();
     const [tree, setTree] = useState<FileNode[]>([]);
     const [tabs, setTabs] = useState<OpenTab[]>([]);
@@ -106,12 +104,6 @@ export function EditorView({ target, targetKey, notify, onDirtyChange, openReque
         },
         [tabs, tgt, notify]
     );
-
-    // Open a file requested externally (solution tree click).
-    useEffect(() => {
-        if (openRequest?.path) openFile({ name: openRequest.path.split('/').pop()!, path: openRequest.path, type: 'file' });
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [openRequest?.nonce]);
 
     const current = tabs.find((t) => t.path === active) ?? null;
     const dirty = current ? current.content !== current.saved : false;
