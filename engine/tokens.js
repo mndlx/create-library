@@ -113,6 +113,7 @@ const toVariable = (p, detected) => ({
     validate: p.validate ?? 'none',
     options: p.options,
     exposeCli: p.exposeCli !== false,
+    required: p.required === true,
     detected,
 });
 /**
@@ -130,7 +131,7 @@ const resolveVariables = (template) => {
         const p = byToken.get(tok);
         out.push(p
             ? toVariable(p, true)
-            : { name: tok, token: tok, message: tok, type: 'text', default: '', validate: 'none', exposeCli: true, detected: true });
+            : { name: tok, token: tok, message: tok, type: 'text', default: '', validate: 'none', exposeCli: true, required: false, detected: true });
         seen.add(tok);
     }
     for (const p of template.manifest.prompts) {

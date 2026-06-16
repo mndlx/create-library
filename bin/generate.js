@@ -60,6 +60,10 @@ const parseArgs = (argv) => {
             args.mode = 'new';
         else if (a === '--force')
             args.force = true;
+        else if (a === '--subfolder')
+            args.subfolder = true;
+        else if (a === '--no-subfolder')
+            args.subfolder = false;
         else if (a === '--yes' || a === '-y')
             args.yes = true;
     }
@@ -161,7 +165,28 @@ async function main() {
     // ----- plan summary ---------------------------------------------------
     const into = path.resolve(args.into ?? process.cwd());
     const projectName = answers[(0, engine_1.nameVarOf)(template)] || template.manifest.name;
-    const targetDir = mode === 'merge' ? into : path.join(into, projectName);
+    // "new" always creates the project folder. "merge" can optionally nest the
+    // output under a project-named subfolder — decided by flag, manifest, or a
+    // prompt (so files don't silently land loose in the target).
+    let nest = mode === 'new';
+    if (mode === 'merge') {
+        if (args.subfolder !== undefined)
+            nest = args.subfolder;
+        else if (args.yes || args.preset)
+            nest = !!template.manifest.mergeSubfolder;
+        else {
+            const ans = await (0, prompts_1.confirm)({
+                message: `Create a subfolder "${projectName}" for the files?`,
+                initialValue: !!template.manifest.mergeSubfolder,
+            });
+            if ((0, prompts_1.isCancel)(ans)) {
+                (0, prompts_1.cancel)('Cancelled.');
+                process.exit(1);
+            }
+            nest = !!ans;
+        }
+    }
+    const targetDir = nest ? path.join(into, projectName) : into;
     prompts_1.log.step(modeBadge(mode) +
         (mode === 'merge'
             ? picocolors_1.default.dim('  merging into existing project → ') + picocolors_1.default.bold(targetDir)
@@ -177,9 +202,11 @@ async function main() {
         if (mode === 'merge') {
             if (!fs.existsSync(into))
                 throw new Error(`Target directory does not exist: ${into}`);
-            const { tokens, report } = (0, engine_1.mergeInto)({ template, projectDir: into, answers, features, force: args.force });
+            if (nest)
+                fs.mkdirSync(targetDir, { recursive: true });
+            const { tokens, report } = (0, engine_1.mergeInto)({ template, projectDir: targetDir, answers, features, force: args.force });
             s?.stop('Merged');
-            prompts_1.log.success(`Merged "${template.manifest.name}" into ${into}`);
+            prompts_1.log.success(`Merged "${template.manifest.name}" into ${targetDir}`);
             prompts_1.log.info(picocolors_1.default.dim(`${report.created.length} file(s) added${report.packageJsonMerged ? ', package.json merged' : ''}`));
             for (const f of report.created.slice(0, 12))
                 prompts_1.log.info(picocolors_1.default.green(`  + ${f}`));

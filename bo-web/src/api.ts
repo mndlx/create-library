@@ -34,6 +34,7 @@ export interface Variable {
     validate: 'packageName' | 'nonEmpty' | 'none';
     options?: string[];
     exposeCli: boolean;
+    required: boolean;
     detected: boolean;
 }
 
@@ -106,6 +107,7 @@ export const api = {
         into?: string;
         force?: boolean;
         includeManifest?: boolean;
+        subfolder?: boolean;
     }) => req<{ targetDir?: string; into?: string; report?: unknown; nextSteps: string[] }>('/api/generate', p),
 
     savePreset: (p: { templateName: string; answers: Record<string, string>; features: Record<string, boolean | string>; file: string }) =>
@@ -139,8 +141,6 @@ export const api = {
         const filename = /filename="([^"]+)"/.exec(cd)?.[1] || `${p.templateName}.zip`;
         return { blob: await r.blob(), filename };
     },
-    addComponent: (p: { templateName: string; component: string; default: boolean }) =>
-        req<{ ok: true }>('/api/add-component', p),
     setOutput: (p: { templateName: string; output: OutputMode }) => req<{ ok: true }>('/api/set-output', p),
     addDir: (p: { dir: string }) => req<{ dir: string }>('/api/add-dir', p),
     validate: (p: { templateName: string }) => req<{ errors: string[] }>('/api/validate', p),

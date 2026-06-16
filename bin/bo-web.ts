@@ -155,47 +155,6 @@ const resolveBase = (q: { template?: string; root?: string }): string => {
     throw new Error('Provide a "template" or a "root" directory');
 };
 
-const componentTsx = (name: string) =>
-    `import * as React from 'react';\n\n` +
-    `export interface ${name}Props extends React.HTMLAttributes<HTMLDivElement> {}\n\n` +
-    `export const ${name} = React.forwardRef<HTMLDivElement, ${name}Props>((props, ref) => (\n` +
-    `    <div ref={ref} {...props} />\n));\n\n` +
-    `${name}.displayName = '${name}';\n`;
-
-function addComponent(t: LoadedTemplate, rawName: string, onByDefault: boolean): void {
-    const comp = String(rawName || '').trim().replace(/[^A-Za-z0-9]/g, '');
-    if (!comp) throw new Error('A component name is required');
-    const featureId = comp.toLowerCase();
-
-    const barrel = path.join(t.sourceDir, 'src', 'components', 'index.ts');
-    fs.mkdirSync(path.dirname(barrel), { recursive: true });
-    if (!fs.existsSync(barrel)) fs.writeFileSync(barrel, '/* inject:componentExports */\n');
-    else if (!fs.readFileSync(barrel, 'utf8').includes('/* inject:componentExports */')) {
-        fs.appendFileSync(barrel, '\n/* inject:componentExports */\n');
-    }
-
-    const overlayRel = path.join('features', featureId);
-    const compDir = path.join(t.dir, overlayRel, 'src', 'components', comp);
-    fs.mkdirSync(compDir, { recursive: true });
-    fs.writeFileSync(path.join(compDir, `${comp}.tsx`), componentTsx(comp));
-    fs.writeFileSync(path.join(compDir, 'index.ts'), `export * from './${comp}';\n`);
-
-    const m = readRawManifest(t.dir);
-    m.features = m.features || [];
-    if (m.features.some((f) => f.id === featureId)) throw new Error(`Feature "${featureId}" already exists`);
-    m.features.push({
-        id: featureId,
-        label: `Include the ${comp} component`,
-        type: 'boolean',
-        default: onByDefault,
-        overlay: overlayRel.split(path.sep).join('/'),
-        inject: [{ file: 'src/components/index.ts', marker: 'componentExports', content: `export * from './${comp}';` }],
-    });
-    const errors = validateManifest(m);
-    if (errors.length) throw new Error(errors.join('; '));
-    writeRawManifest(t.dir, m);
-}
-
 async function handleApi(
     req: http.IncomingMessage,
     res: http.ServerResponse,
@@ -222,9 +181,11 @@ async function handleApi(
         const includeManifest = !!body.includeManifest;
 
         if (mode === 'merge') {
-            fs.mkdirSync(into, { recursive: true }); // merging into a fresh folder is fine
-            const { tokens, report } = mergeInto({ template: t, projectDir: into, answers, features, force: !!body.force, includeManifest });
-            return sendJson(res, 200, { ok: true, mode, into, report, nextSteps: renderNextSteps(t, tokens) });
+            const projectName = answers[nameVarOf(t)] || t.manifest.name;
+            const dir = body.subfolder ? path.join(into, projectName) : into;
+            fs.mkdirSync(dir, { recursive: true }); // merging into a fresh folder is fine
+            const { tokens, report } = mergeInto({ template: t, projectDir: dir, answers, features, force: !!body.force, includeManifest });
+            return sendJson(res, 200, { ok: true, mode, into: dir, report, nextSteps: renderNextSteps(t, tokens) });
         }
         const name = answers[nameVarOf(t)] || t.manifest.name;
         const targetDir = path.join(into, name);
@@ -378,7 +339,7 @@ async function handleApi(
     // Upsert a token's metadata (message, default, type, options, validate, exposeCli).
     if (req.method === 'POST' && pathname === '/api/set-variable') {
         const t = requireTemplate(body.templateName);
-        const v = body.variable as PromptDef & { exposeCli?: boolean };
+        const v = body.variable as PromptDef & { exposeCli?: boolean; required?: boolean };
         if (!v || !v.name) throw new Error('variable.name is required');
         const m = readRawManifest(t.dir);
         m.prompts = m.prompts || [];
@@ -393,6 +354,7 @@ async function handleApi(
             validate: v.validate,
             options: v.type === 'select' ? v.options : undefined,
             exposeCli: v.exposeCli !== false,
+            required: v.required === true,
         };
         if (idx >= 0) m.prompts[idx] = next;
         else m.prompts.push(next);
@@ -408,11 +370,6 @@ async function handleApi(
         const token = String(body.token || '');
         m.prompts = (m.prompts || []).filter((p) => (p.token || p.name) !== token);
         writeRawManifest(t.dir, m);
-        return sendJson(res, 200, { ok: true });
-    }
-
-    if (req.method === 'POST' && pathname === '/api/add-component') {
-        addComponent(requireTemplate(body.templateName), body.component, !!body.default);
         return sendJson(res, 200, { ok: true });
     }
 

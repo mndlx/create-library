@@ -47,8 +47,11 @@ const runTemplatePrompts = async (template) => {
         else {
             const value = await (0, prompts_1.text)({
                 message,
-                placeholder: v.default ? `Enter = ${v.default}` : 'required',
+                placeholder: v.default ? `Enter = ${v.default}` : v.required ? 'required' : 'optional',
                 defaultValue: v.default,
+                validate: v.required
+                    ? (val) => ((String(val ?? '') || v.default).trim() ? undefined : 'A value is required')
+                    : undefined,
             });
             if ((0, prompts_1.isCancel)(value))
                 bail();

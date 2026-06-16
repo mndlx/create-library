@@ -29,9 +29,10 @@ tokens. Handy for turning an existing project into a reusable template.
 | `name` | Unique template id. |
 | `title`, `description` | Shown in the UI/CLI. |
 | `output` | `new` (create a folder) or `merge` (integrate into an existing project). |
+| `mergeSubfolder` | In merge mode, default to nesting output under a project-named subfolder. |
 | `source` | Payload location; default `template`, or `.` for flat. |
 | `tokenConfig` | `{ "start": "@@", "end": "@@" }` — delimiters for dynamic tokens. |
-| `prompts` | Per-token metadata (question, default, type, options, validate, exposeCli). |
+| `prompts` | Per-token metadata (question, default, type, options, validate, exposeCli, required). |
 | `features` | Optional, conditional parts (overlays / package.json / injects / tokens). |
 | `nextSteps` | Lines printed after generation (tokens are substituted). |
 
@@ -45,8 +46,9 @@ matched in **file contents and in file/dir names**.
 - Tokens are **auto-detected** by scanning the payload (and feature overlays).
   The detected set drives the inspector and what's asked at generation.
 - Each token has metadata you can edit (the *inspector*): the question, a
-  default, type (`text`/`select`), and `exposeCli` — whether the CLI prompts for
-  it (default `true`; if `false` the default is used).
+  default, type (`text`/`select`), `exposeCli` — whether the CLI prompts for it
+  (default `true`; if `false` the default is used, so a default is then
+  required) — and `required` (generation needs a non-empty value).
 - After manual edits in the editor, use **Sync from files** to re-scan.
 
 > **Replacement not working?** Check that the delimiters in

@@ -45,8 +45,11 @@ export const runTemplatePrompts = async (template: LoadedTemplate): Promise<Stat
         } else {
             const value = await text({
                 message,
-                placeholder: v.default ? `Enter = ${v.default}` : 'required',
+                placeholder: v.default ? `Enter = ${v.default}` : v.required ? 'required' : 'optional',
                 defaultValue: v.default,
+                validate: v.required
+                    ? (val) => ((String(val ?? '') || v.default).trim() ? undefined : 'A value is required')
+                    : undefined,
             });
             if (isCancel(value)) bail();
             answers[v.name] = applyValidator(v, String(value ?? ''));

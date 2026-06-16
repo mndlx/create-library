@@ -88,6 +88,8 @@ export interface ResolvedVariable {
     validate: 'packageName' | 'nonEmpty' | 'none';
     options?: string[];
     exposeCli: boolean;
+    /** Value is mandatory: generation needs a non-empty answer or default. */
+    required: boolean;
     /** True when the token was found in the template files (vs. only declared). */
     detected: boolean;
 }
@@ -101,6 +103,7 @@ const toVariable = (p: PromptDef, detected: boolean): ResolvedVariable => ({
     validate: p.validate ?? 'none',
     options: p.options,
     exposeCli: p.exposeCli !== false,
+    required: p.required === true,
     detected,
 });
 
@@ -120,7 +123,7 @@ export const resolveVariables = (template: LoadedTemplate): ResolvedVariable[] =
         out.push(
             p
                 ? toVariable(p, true)
-                : { name: tok, token: tok, message: tok, type: 'text', default: '', validate: 'none', exposeCli: true, detected: true }
+                : { name: tok, token: tok, message: tok, type: 'text', default: '', validate: 'none', exposeCli: true, required: false, detected: true }
         );
         seen.add(tok);
     }

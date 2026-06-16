@@ -38,17 +38,20 @@ Everything about the selected template lives in the resizable **right panel**:
 
 - **Template settings** — title, description, version, validate.
 - **Variables** — the auto-detected inspector. Edits **auto-save**; **Sync**
-  re-scans after manual edits; per-token CLI switch. Token delimiters are
-  read from `tokenConfig` in `template.json` (edit them there); a warning
-  appears when files use a different delimiter style.
+  re-scans after manual edits. Each token has an **Expose in CLI** switch (off →
+  the default is used, so a default is then required) and a **Required** switch
+  (generation needs a non-empty value). Token delimiters are read from
+  `tokenConfig` in `template.json` (edit them there); a warning appears when
+  files use a different delimiter style.
 - **Generate to folder** — fill the variable values and merge the output —
   every placeholder replaced — into a target folder picked with the built-in
-  folder browser (created if missing, existing files kept unless overwrite);
-  presets; optional inclusion of the template meta files.
+  folder browser (created if missing, existing files kept unless overwrite).
+  **Nest in a project subfolder** puts the files under `<target>/<project>`;
+  presets and optional inclusion of the template meta files round it out.
 - **Publish to registry** — version bump (patch/minor/major) and a snapshot
   (placeholders intact) into `~/.virtuallab-create-library/published`; the CLI
   uses the latest published version of each template.
-- **Components & dirs** — component scaffolding; register external dirs.
+- **Template dirs** — register external directories that hold templates.
 
 **Export** (top bar) generates from the latest **published** version: a dialog
 asks for the variable values, then the result — placeholders replaced, same

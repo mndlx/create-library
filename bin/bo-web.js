@@ -150,45 +150,6 @@ const resolveBase = (q) => {
         return requireTemplate(q.template).dir;
     throw new Error('Provide a "template" or a "root" directory');
 };
-const componentTsx = (name) => `import * as React from 'react';\n\n` +
-    `export interface ${name}Props extends React.HTMLAttributes<HTMLDivElement> {}\n\n` +
-    `export const ${name} = React.forwardRef<HTMLDivElement, ${name}Props>((props, ref) => (\n` +
-    `    <div ref={ref} {...props} />\n));\n\n` +
-    `${name}.displayName = '${name}';\n`;
-function addComponent(t, rawName, onByDefault) {
-    const comp = String(rawName || '').trim().replace(/[^A-Za-z0-9]/g, '');
-    if (!comp)
-        throw new Error('A component name is required');
-    const featureId = comp.toLowerCase();
-    const barrel = path.join(t.sourceDir, 'src', 'components', 'index.ts');
-    fs.mkdirSync(path.dirname(barrel), { recursive: true });
-    if (!fs.existsSync(barrel))
-        fs.writeFileSync(barrel, '/* inject:componentExports */\n');
-    else if (!fs.readFileSync(barrel, 'utf8').includes('/* inject:componentExports */')) {
-        fs.appendFileSync(barrel, '\n/* inject:componentExports */\n');
-    }
-    const overlayRel = path.join('features', featureId);
-    const compDir = path.join(t.dir, overlayRel, 'src', 'components', comp);
-    fs.mkdirSync(compDir, { recursive: true });
-    fs.writeFileSync(path.join(compDir, `${comp}.tsx`), componentTsx(comp));
-    fs.writeFileSync(path.join(compDir, 'index.ts'), `export * from './${comp}';\n`);
-    const m = (0, engine_1.readRawManifest)(t.dir);
-    m.features = m.features || [];
-    if (m.features.some((f) => f.id === featureId))
-        throw new Error(`Feature "${featureId}" already exists`);
-    m.features.push({
-        id: featureId,
-        label: `Include the ${comp} component`,
-        type: 'boolean',
-        default: onByDefault,
-        overlay: overlayRel.split(path.sep).join('/'),
-        inject: [{ file: 'src/components/index.ts', marker: 'componentExports', content: `export * from './${comp}';` }],
-    });
-    const errors = (0, engine_1.validateManifest)(m);
-    if (errors.length)
-        throw new Error(errors.join('; '));
-    (0, engine_1.writeRawManifest)(t.dir, m);
-}
 async function handleApi(req, res, pathname, query) {
     if (req.method === 'GET' && pathname === '/api/state') {
         return sendJson(res, 200, {
@@ -206,9 +167,11 @@ async function handleApi(req, res, pathname, query) {
         const into = path.resolve(body.into || process.cwd());
         const includeManifest = !!body.includeManifest;
         if (mode === 'merge') {
-            fs.mkdirSync(into, { recursive: true }); // merging into a fresh folder is fine
-            const { tokens, report } = (0, engine_1.mergeInto)({ template: t, projectDir: into, answers, features, force: !!body.force, includeManifest });
-            return sendJson(res, 200, { ok: true, mode, into, report, nextSteps: (0, engine_1.renderNextSteps)(t, tokens) });
+            const projectName = answers[(0, engine_1.nameVarOf)(t)] || t.manifest.name;
+            const dir = body.subfolder ? path.join(into, projectName) : into;
+            fs.mkdirSync(dir, { recursive: true }); // merging into a fresh folder is fine
+            const { tokens, report } = (0, engine_1.mergeInto)({ template: t, projectDir: dir, answers, features, force: !!body.force, includeManifest });
+            return sendJson(res, 200, { ok: true, mode, into: dir, report, nextSteps: (0, engine_1.renderNextSteps)(t, tokens) });
         }
         const name = answers[(0, engine_1.nameVarOf)(t)] || t.manifest.name;
         const targetDir = path.join(into, name);
@@ -382,6 +345,7 @@ async function handleApi(req, res, pathname, query) {
             validate: v.validate,
             options: v.type === 'select' ? v.options : undefined,
             exposeCli: v.exposeCli !== false,
+            required: v.required === true,
         };
         if (idx >= 0)
             m.prompts[idx] = next;
@@ -399,10 +363,6 @@ async function handleApi(req, res, pathname, query) {
         const token = String(body.token || '');
         m.prompts = (m.prompts || []).filter((p) => (p.token || p.name) !== token);
         (0, engine_1.writeRawManifest)(t.dir, m);
-        return sendJson(res, 200, { ok: true });
-    }
-    if (req.method === 'POST' && pathname === '/api/add-component') {
-        addComponent(requireTemplate(body.templateName), body.component, !!body.default);
         return sendJson(res, 200, { ok: true });
     }
     if (req.method === 'POST' && pathname === '/api/set-output') {

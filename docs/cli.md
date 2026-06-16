@@ -32,17 +32,26 @@ and skipped files.
 | `--template <name>`, `-t` | Use this template directly (skip the picker). |
 | `--new` / `--merge` | Force the output mode (default: the template's `output`). |
 | `--into <dir>` | Target directory (default: current working directory). |
+| `--subfolder` / `--no-subfolder` | In merge mode, nest output under a project-named subfolder (or not). Omit to be asked interactively. |
 | `--preset <file>` | Generate from a saved preset (skips prompts — the headless mode). |
 | `--save-preset <file>` | Save the chosen answers/features to a preset file. |
 | `--force` | In merge mode, overwrite existing files. |
 | `--yes`, `-y` | Use defaults, no prompts (warns about empty token values). |
 
-## Tokens and `exposeCli`
+## Tokens, `exposeCli` and `required`
 
 The CLI prompts for each detected/declared token, in order. A token whose
-metadata has `exposeCli: false` is **not** prompted — its default is used. Set
-this in the back-office (Author → Variables → the **CLI** switch) or directly in
-`template.json`.
+metadata has `exposeCli: false` is **not** prompted — its default is used, so a
+non-exposed token must have a default. A token marked `required: true` must
+resolve to a non-empty value: when exposed, the prompt rejects an empty answer.
+Set both in the back-office (Variables tab) or directly in `template.json`.
+
+## Merge subfolder
+
+In merge mode the output normally lands directly in the target folder. Pass
+`--subfolder` to nest it under a folder named by the project (the `nameVar`
+answer), `--no-subfolder` to force loose, or omit both to be asked. A template
+can preset the default with `"mergeSubfolder": true` in its manifest.
 
 ## Presets
 

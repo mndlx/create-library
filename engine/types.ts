@@ -17,6 +17,8 @@ export interface PromptDef {
     options?: string[];
     /** Whether the CLI prompts for this token. Default true; if false the default is used. */
     exposeCli?: boolean;
+    /** Value is mandatory: a non-empty answer (or default) must be supplied. */
+    required?: boolean;
 }
 
 /** Delimiters that wrap a dynamic token in template files, e.g. `@@`name`@@`. */
@@ -87,6 +89,8 @@ export interface TemplateManifest {
     nameVar?: string;
     /** "new" creates a folder; "merge" integrates into an existing project. Default "new". */
     output?: 'new' | 'merge';
+    /** In merge mode, nest output under a subfolder named by the project. Default false. */
+    mergeSubfolder?: boolean;
     /** Delimiters for dynamic tokens. Defaults to `__`/`__` (legacy) when unset. */
     tokenConfig?: TokenConfig;
     prompts: PromptDef[];

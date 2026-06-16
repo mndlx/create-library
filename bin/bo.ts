@@ -202,53 +202,6 @@ async function setOutputModeAction(): Promise<void> {
     console.log(text(`\nSet output mode of "${manifest.name}" to ${mode}.`, { color: 82 }));
 }
 
-const COMPONENT_TSX = (name: string) =>
-    `import * as React from 'react';\n\n` +
-    `export interface ${name}Props extends React.HTMLAttributes<HTMLDivElement> {}\n\n` +
-    `export const ${name} = React.forwardRef<HTMLDivElement, ${name}Props>((props, ref) => (\n` +
-    `    <div ref={ref} {...props} />\n));\n\n` +
-    `${name}.displayName = '${name}';\n`;
-
-async function addComponentAction(): Promise<void> {
-    const template = await chooseTemplate('add a component to');
-    if (!template) return;
-
-    const comp = (await input('Component name (PascalCase)')).trim().replace(/[^A-Za-z0-9]/g, '');
-    if (!comp) return void console.log('A component name is required.');
-    const featureId = comp.toLowerCase();
-
-    const barrel = path.join(template.sourceDir, 'src', 'components', 'index.ts');
-    fs.mkdirSync(path.dirname(barrel), { recursive: true });
-    if (!fs.existsSync(barrel)) fs.writeFileSync(barrel, '/* inject:componentExports */\n');
-    else if (!fs.readFileSync(barrel, 'utf8').includes('/* inject:componentExports */')) {
-        fs.appendFileSync(barrel, '\n/* inject:componentExports */\n');
-    }
-
-    const overlayRel = path.join('features', featureId);
-    const compDir = path.join(template.dir, overlayRel, 'src', 'components', comp);
-    fs.mkdirSync(compDir, { recursive: true });
-    fs.writeFileSync(path.join(compDir, `${comp}.tsx`), COMPONENT_TSX(comp));
-    fs.writeFileSync(path.join(compDir, 'index.ts'), `export * from './${comp}';\n`);
-
-    const manifest = readRawManifest(template.dir);
-    manifest.features = manifest.features || [];
-    if (manifest.features.some((f) => f.id === featureId)) return void console.log(`Feature "${featureId}" already exists.`);
-    const onByDefault = (await select(`Include ${comp} by default?`, ['no', 'yes'])) === 'yes';
-    manifest.features.push({
-        id: featureId,
-        label: `Include the ${comp} component`,
-        type: 'boolean',
-        default: onByDefault,
-        overlay: overlayRel.split(path.sep).join('/'),
-        inject: [{ file: 'src/components/index.ts', marker: 'componentExports', content: `export * from './${comp}';` }],
-    });
-
-    const errors = validateManifest(manifest);
-    if (errors.length) return void console.error('Manifest invalid:\n - ' + errors.join('\n - '));
-    writeRawManifest(template.dir, manifest);
-    console.log(text(`\nAdded component "${comp}" as feature "${featureId}".`, { color: 82 }));
-}
-
 async function validateAction(): Promise<void> {
     const template = await chooseTemplate('validate');
     if (!template) return;
@@ -272,7 +225,6 @@ async function main() {
             'Generate from preset',
             'Create template',
             'Add variable to template',
-            'Add component to template',
             'Set template output mode',
             'List templates',
             'Validate template',
@@ -285,7 +237,6 @@ async function main() {
             case 'Generate from preset': await fromPresetAction(); break;
             case 'Create template': await createTemplateAction(); break;
             case 'Add variable to template': await addVariableAction(); break;
-            case 'Add component to template': await addComponentAction(); break;
             case 'Set template output mode': await setOutputModeAction(); break;
             case 'List templates': listAction(); break;
             case 'Validate template': await validateAction(); break;

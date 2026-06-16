@@ -102,19 +102,8 @@ function TemplateBody({ template, notify, reload, onRenamed }: SectionProps & { 
     );
 }
 
-function ComponentsBody({ template, notify, reload }: SectionProps) {
-    const [name, setName] = useState('');
-    const [byDefault, setByDefault] = useState(false);
+function DirsBody({ notify, reload }: SectionProps) {
     const [dir, setDir] = useState('');
-
-    const addComponent = async () => {
-        try {
-            await api.addComponent({ templateName: template.name, component: name, default: byDefault });
-            notify(`Component "${name}" added`, 'success');
-            setName('');
-            reload();
-        } catch (e) { notify((e as Error).message, 'error'); }
-    };
 
     const addDir = async () => {
         try { const r = await api.addDir({ dir }); notify(`Registered ${r.dir}`, 'success'); setDir(''); reload(); }
@@ -122,22 +111,12 @@ function ComponentsBody({ template, notify, reload }: SectionProps) {
     };
 
     return (
-        <>
-            <Field label="Component" control={
-                <Stack direction="row" spacing={1}>
-                    <PanelInput fullWidth placeholder="Modal" value={name} onChange={(e) => setName(e.target.value)} />
-                    <Button size="small" variant="contained" onClick={addComponent} sx={{ flexShrink: 0 }}>Add</Button>
-                </Stack>
-            } />
-            <SwitchField label="Included by default" checked={byDefault} onChange={setByDefault} />
-            <Divider sx={{ my: 0.5 }} />
-            <Field label="External dir" control={
-                <Stack direction="row" spacing={1}>
-                    <PanelInput fullWidth placeholder="C:\\path\\to\\templates" value={dir} onChange={(e) => setDir(e.target.value)} />
-                    <Button size="small" variant="outlined" onClick={addDir} sx={{ flexShrink: 0 }}>Add</Button>
-                </Stack>
-            } />
-        </>
+        <Field label="External dir" control={
+            <Stack direction="row" spacing={1}>
+                <PanelInput fullWidth placeholder="C:\\path\\to\\templates" value={dir} onChange={(e) => setDir(e.target.value)} />
+                <Button size="small" variant="outlined" onClick={addDir} sx={{ flexShrink: 0 }}>Add</Button>
+            </Stack>
+        } />
     );
 }
 
@@ -150,16 +129,17 @@ function GenerateBody({ template, state, notify, onResult }: SectionProps & { on
     const [into, setInto] = useState('');
     const [force, setForce] = useState(false);
     const [includeManifest, setIncludeManifest] = useState(false);
+    const [subfolder, setSubfolder] = useState(false);
 
     useEffect(() => {
         setAnswers(Object.fromEntries(template.variables.map((v) => [v.name, v.default ?? ''])));
         setFeatures(Object.fromEntries(template.features.map((f) => [f.id, f.default ?? (f.type === 'boolean' ? false : '')])));
-        setInto(''); setForce(false); setIncludeManifest(false);
+        setInto(''); setForce(false); setIncludeManifest(false); setSubfolder(false);
     }, [template]);
 
     const generate = async () => {
         try {
-            const r = await api.generate({ templateName: template.name, answers, features, mode: 'merge', into: into || undefined, force, includeManifest });
+            const r = await api.generate({ templateName: template.name, answers, features, mode: 'merge', into: into || undefined, force, includeManifest, subfolder });
             onResult(r);
             notify('Generated', 'success');
         } catch (e) { notify((e as Error).message, 'error'); }
@@ -211,6 +191,7 @@ function GenerateBody({ template, state, notify, onResult }: SectionProps & { on
             <Divider sx={{ my: 0.5 }} />
             <Field label="Target folder" hint="created if missing"
                 control={<FolderField value={into} onChange={setInto} placeholder={state.cwd} pickerTitle="Target folder" />} />
+            <SwitchField label="Nest in a project subfolder" hint="files go under <target>/<project name>" checked={subfolder} onChange={setSubfolder} />
             <SwitchField label="Overwrite existing files" checked={force} onChange={setForce} />
             <SwitchField label="Include template meta files" hint="template.json, features/" checked={includeManifest} onChange={setIncludeManifest} />
             <Stack direction="row" spacing={1} sx={{ pt: 0.5 }}>
@@ -323,8 +304,8 @@ export function RightPanel({ template, state, notify, reload, onResult, onRename
                     <TabBody>
                         <TemplateBody template={template} state={state} notify={notify} reload={reload} onRenamed={onRenamed} />
                         <Divider sx={{ my: 1 }} />
-                        <GroupLabel>Components &amp; dirs</GroupLabel>
-                        <ComponentsBody template={template} state={state} notify={notify} reload={reload} />
+                        <GroupLabel>Template dirs</GroupLabel>
+                        <DirsBody template={template} state={state} notify={notify} reload={reload} />
                     </TabBody>
                 )}
                 {tab === 'publish' && <TabBody><PublishBody template={template} state={state} notify={notify} reload={reload} /></TabBody>}

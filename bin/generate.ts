@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import * as fs from 'fs';
 import * as path from 'path';
-import { intro, isCancel, cancel, log, note, outro, select, spinner } from '@clack/prompts';
+import { confirm, intro, isCancel, cancel, log, note, outro, select, spinner } from '@clack/prompts';
 import pc from 'picocolors';
 import {
     GenerationConfig,
@@ -32,6 +32,7 @@ interface Args {
     mode?: 'new' | 'merge';
     force: boolean;
     yes: boolean;
+    subfolder?: boolean;
 }
 
 const parseArgs = (argv: string[]): Args => {
@@ -45,6 +46,8 @@ const parseArgs = (argv: string[]): Args => {
         else if (a === '--merge') args.mode = 'merge';
         else if (a === '--new') args.mode = 'new';
         else if (a === '--force') args.force = true;
+        else if (a === '--subfolder') args.subfolder = true;
+        else if (a === '--no-subfolder') args.subfolder = false;
         else if (a === '--yes' || a === '-y') args.yes = true;
     }
     return args;
@@ -158,7 +161,24 @@ async function main() {
     // ----- plan summary ---------------------------------------------------
     const into = path.resolve(args.into ?? process.cwd());
     const projectName = answers[nameVarOf(template)] || template.manifest.name;
-    const targetDir = mode === 'merge' ? into : path.join(into, projectName);
+
+    // "new" always creates the project folder. "merge" can optionally nest the
+    // output under a project-named subfolder — decided by flag, manifest, or a
+    // prompt (so files don't silently land loose in the target).
+    let nest = mode === 'new';
+    if (mode === 'merge') {
+        if (args.subfolder !== undefined) nest = args.subfolder;
+        else if (args.yes || args.preset) nest = !!template.manifest.mergeSubfolder;
+        else {
+            const ans = await confirm({
+                message: `Create a subfolder "${projectName}" for the files?`,
+                initialValue: !!template.manifest.mergeSubfolder,
+            });
+            if (isCancel(ans)) { cancel('Cancelled.'); process.exit(1); }
+            nest = !!ans;
+        }
+    }
+    const targetDir = nest ? path.join(into, projectName) : into;
 
     log.step(
         modeBadge(mode) +
@@ -176,10 +196,11 @@ async function main() {
     try {
         if (mode === 'merge') {
             if (!fs.existsSync(into)) throw new Error(`Target directory does not exist: ${into}`);
-            const { tokens, report } = mergeInto({ template, projectDir: into, answers, features, force: args.force });
+            if (nest) fs.mkdirSync(targetDir, { recursive: true });
+            const { tokens, report } = mergeInto({ template, projectDir: targetDir, answers, features, force: args.force });
             s?.stop('Merged');
 
-            log.success(`Merged "${template.manifest.name}" into ${into}`);
+            log.success(`Merged "${template.manifest.name}" into ${targetDir}`);
             log.info(pc.dim(`${report.created.length} file(s) added${report.packageJsonMerged ? ', package.json merged' : ''}`));
             for (const f of report.created.slice(0, 12)) log.info(pc.green(`  + ${f}`));
             if (report.created.length > 12) log.info(pc.dim(`  … +${report.created.length - 12} more`));

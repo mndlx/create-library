@@ -35,12 +35,12 @@ function SaveStatus({ state }: { state: SaveState }) {
 function VariableRow({ template, v, notify, reload }: { template: Template; v: Variable } & Omit<Props, 'template'>) {
     const [form, setForm] = useState({
         message: v.message, def: v.default, type: v.type,
-        options: (v.options ?? []).join(', '), exposeCli: v.exposeCli,
+        options: (v.options ?? []).join(', '), exposeCli: v.exposeCli, required: v.required,
     });
     const [state, setState] = useState<SaveState>('idle');
 
     useEffect(() => {
-        setForm({ message: v.message, def: v.default, type: v.type, options: (v.options ?? []).join(', '), exposeCli: v.exposeCli });
+        setForm({ message: v.message, def: v.default, type: v.type, options: (v.options ?? []).join(', '), exposeCli: v.exposeCli, required: v.required });
         setState('idle');
     }, [v]);
 
@@ -61,7 +61,7 @@ function VariableRow({ template, v, notify, reload }: { template: Template; v: V
                         name: v.name, token: v.token, message: form.message, type: form.type,
                         default: form.def, validate: v.validate,
                         options: form.type === 'select' ? form.options.split(',').map((s) => s.trim()).filter(Boolean) : undefined,
-                        exposeCli: form.exposeCli,
+                        exposeCli: form.exposeCli, required: form.required,
                     },
                 });
                 setState('saved');
@@ -79,8 +79,9 @@ function VariableRow({ template, v, notify, reload }: { template: Template; v: V
     };
 
     const tk = `${template.tokenConfig.start}${v.token}${template.tokenConfig.end}`;
-    // When exposed to the CLI a default is required (the prompt's fallback).
-    const defaultRequired = form.exposeCli;
+    // A non-exposed token is never prompted, so its default IS the value — it
+    // must be set. An exposed token is asked at generation, so no default needed.
+    const defaultRequired = !form.exposeCli;
     const defaultMissing = defaultRequired && !form.def.trim();
 
     return (
@@ -100,7 +101,7 @@ function VariableRow({ template, v, notify, reload }: { template: Template; v: V
                 <Field label="Question" labelWidth={72} control={<PanelInput fullWidth value={form.message} onChange={(e) => update({ message: e.target.value })} />} />
                 <Field label={defaultRequired ? 'Default *' : 'Default'} labelWidth={72} control={
                     <PanelInput fullWidth required={defaultRequired} error={defaultMissing}
-                        helperText={defaultMissing ? 'Required when exposed to the CLI' : undefined}
+                        helperText={defaultMissing ? 'Required when not exposed to the CLI' : undefined}
                         value={form.def} onChange={(e) => update({ def: e.target.value })} />
                 } />
                 <Field label="Type" labelWidth={72} control={
@@ -110,7 +111,8 @@ function VariableRow({ template, v, notify, reload }: { template: Template; v: V
                 {form.type === 'select' && (
                     <Field label="Options" labelWidth={72} control={<PanelInput fullWidth value={form.options} onChange={(e) => update({ options: e.target.value })} />} />
                 )}
-                <SwitchField label="Expose in CLI" hint="asked at generation; needs a default" checked={form.exposeCli} onChange={(c) => update({ exposeCli: c })} />
+                <SwitchField label="Expose in CLI" hint="asked at generation; if off, the default is used" checked={form.exposeCli} onChange={(c) => update({ exposeCli: c })} />
+                <SwitchField label="Required" hint="generation needs a non-empty value" checked={form.required} onChange={(c) => update({ required: c })} />
             </Stack>
         </Box>
     );
@@ -133,7 +135,7 @@ export function VariablesPanel({ template, notify, reload }: Props) {
         try {
             await api.setVariable({
                 templateName: template.name,
-                variable: { name: token, token, message: token, type: 'text', default: '', validate: 'none', exposeCli: true },
+                variable: { name: token, token, message: token, type: 'text', default: '', validate: 'none', exposeCli: true, required: false },
             });
             notify(`Added ${start}${token}${end}`, 'success');
             setNewToken('');
