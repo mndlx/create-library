@@ -47,7 +47,7 @@ function Row({ node, depth, selectedPath, onSelect, onContext, onMove, dragOver,
                     if (src) onMove(src, dropTarget);
                 }}
                 onClick={() => { if (isDir) setOpen((o) => !o); onSelect(node); }}
-                onContextMenu={(e) => onContext(e, node)}
+                onContextMenu={(e) => { e.stopPropagation(); onContext(e, node); }}
                 sx={{
                     pl: 1 + depth * 1.5, py: 0.25, borderRadius: 1,
                     bgcolor: dragOver === node.path && isDir ? 'action.hover' : undefined,
