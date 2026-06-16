@@ -7,6 +7,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
+import Divider from '@mui/material/Divider';
 import IconButton from '@mui/material/IconButton';
 import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
@@ -78,10 +79,13 @@ function VariableRow({ template, v, notify, reload }: { template: Template; v: V
     };
 
     const tk = `${template.tokenConfig.start}${v.token}${template.tokenConfig.end}`;
+    // When exposed to the CLI a default is required (the prompt's fallback).
+    const defaultRequired = form.exposeCli;
+    const defaultMissing = defaultRequired && !form.def.trim();
 
     return (
-        <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 2, p: 1.25, bgcolor: 'background.paper' }}>
-            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+        <Box sx={{ py: 1.25 }}>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.75 }}>
                 <Typography sx={{ fontFamily: 'ui-monospace, monospace', fontWeight: 700, fontSize: 12.5, color: 'secondary.main' }}>{tk}</Typography>
                 {v.detected
                     ? <Chip size="small" label="in files" color="secondary" variant="outlined" sx={{ height: 17, fontSize: 10 }} />
@@ -94,7 +98,11 @@ function VariableRow({ template, v, notify, reload }: { template: Template; v: V
             </Stack>
             <Stack spacing={0.75}>
                 <Field label="Question" labelWidth={72} control={<PanelInput fullWidth value={form.message} onChange={(e) => update({ message: e.target.value })} />} />
-                <Field label="Default" labelWidth={72} control={<PanelInput fullWidth value={form.def} onChange={(e) => update({ def: e.target.value })} />} />
+                <Field label={defaultRequired ? 'Default *' : 'Default'} labelWidth={72} control={
+                    <PanelInput fullWidth required={defaultRequired} error={defaultMissing}
+                        helperText={defaultMissing ? 'Required when exposed to the CLI' : undefined}
+                        value={form.def} onChange={(e) => update({ def: e.target.value })} />
+                } />
                 <Field label="Type" labelWidth={72} control={
                     <PanelSelect fullWidth value={form.type} onChange={(val) => update({ type: val as Variable['type'] })}
                         options={[{ value: 'text' }, { value: 'select' }]} />
@@ -102,7 +110,7 @@ function VariableRow({ template, v, notify, reload }: { template: Template; v: V
                 {form.type === 'select' && (
                     <Field label="Options" labelWidth={72} control={<PanelInput fullWidth value={form.options} onChange={(e) => update({ options: e.target.value })} />} />
                 )}
-                <SwitchField label="Expose in CLI" hint="off = its default is used" checked={form.exposeCli} onChange={(c) => update({ exposeCli: c })} />
+                <SwitchField label="Expose in CLI" hint="asked at generation; needs a default" checked={form.exposeCli} onChange={(c) => update({ exposeCli: c })} />
             </Stack>
         </Box>
     );
@@ -165,10 +173,14 @@ export function VariablesPanel({ template, notify, reload }: Props) {
                     No tokens yet — use <Box component="code">{start}name{end}</Box> in the editor, or add one below.
                 </Typography>
             )}
-            {template.variables.map((v) => (
-                <VariableRow key={v.token} template={template} v={v} notify={notify} reload={reload} />
+            {template.variables.map((v, i) => (
+                <Box key={v.token}>
+                    {i > 0 && <Divider />}
+                    <VariableRow template={template} v={v} notify={notify} reload={reload} />
+                </Box>
             ))}
 
+            {template.variables.length > 0 && <Divider sx={{ mt: 0.5 }} />}
             <Field label="New token" control={
                 <Stack direction="row" spacing={1} alignItems="center">
                     <PanelInput placeholder="e.g. apiUrl" value={newToken} fullWidth

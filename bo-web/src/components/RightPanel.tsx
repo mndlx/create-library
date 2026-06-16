@@ -5,12 +5,14 @@ import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import Divider from '@mui/material/Divider';
 import Stack from '@mui/material/Stack';
+import Tab from '@mui/material/Tab';
+import Tabs from '@mui/material/Tabs';
 import Typography from '@mui/material/Typography';
 import { useCallback, useEffect, useState } from 'react';
 import { api, type AppState, type PublishedVersion, type Template } from '../api';
 import { useDialogs } from './dialogs';
 import { FolderField } from './FolderPicker';
-import { Field, PanelInput, PanelSelect, Section, SwitchField } from './inspector';
+import { Field, PanelInput, PanelSelect, SwitchField } from './inspector';
 import { VariablesPanel } from './VariablesPanel';
 
 type Notify = (msg: string, sev?: 'success' | 'error' | 'info') => void;
@@ -22,9 +24,18 @@ interface SectionProps {
     reload: () => void;
 }
 
-/* ------------------------------- Template ------------------------------- */
+/** Padded tab body. */
+const TabBody = ({ children }: { children: React.ReactNode }) => (
+    <Box sx={{ px: 1.5, py: 1.5 }}><Stack spacing={0.75}>{children}</Stack></Box>
+);
 
-function TemplateSection({ template, notify, reload, onRenamed }: SectionProps & { onRenamed: (name: string) => void }) {
+const GroupLabel = ({ children }: { children: React.ReactNode }) => (
+    <Typography variant="overline" color="text.secondary" sx={{ fontSize: 10 }}>{children}</Typography>
+);
+
+/* ------------------------------- Settings ------------------------------- */
+
+function TemplateBody({ template, notify, reload, onRenamed }: SectionProps & { onRenamed: (name: string) => void }) {
     const { confirm } = useDialogs();
     const [name, setName] = useState(template.name);
     const [title, setTitle] = useState(template.title);
@@ -75,7 +86,7 @@ function TemplateSection({ template, notify, reload, onRenamed }: SectionProps &
     };
 
     return (
-        <Section title="Template settings">
+        <>
             <Field label="Name" hint={name !== template.name ? 'renames folder' : undefined} control={<PanelInput fullWidth value={name} onChange={(e) => setName(e.target.value)} />} />
             <Field label="Title" control={<PanelInput fullWidth value={title} onChange={(e) => setTitle(e.target.value)} />} />
             <Field label="Description" align="start" control={<PanelInput fullWidth multiline maxRows={4} value={description} onChange={(e) => setDescription(e.target.value)} />} />
@@ -87,23 +98,52 @@ function TemplateSection({ template, notify, reload, onRenamed }: SectionProps &
                 <Button size="small" color="error" variant="outlined" onClick={del}>Delete…</Button>
             </Stack>
             <Typography variant="caption" color="text.secondary" sx={{ wordBreak: 'break-all', fontFamily: 'ui-monospace, monospace', fontSize: 10 }}>{template.dir}</Typography>
-        </Section>
+        </>
     );
 }
 
-/* ------------------------------- Variables ------------------------------- */
+function ComponentsBody({ template, notify, reload }: SectionProps) {
+    const [name, setName] = useState('');
+    const [byDefault, setByDefault] = useState(false);
+    const [dir, setDir] = useState('');
 
-function VariablesSection({ template, notify, reload }: SectionProps) {
+    const addComponent = async () => {
+        try {
+            await api.addComponent({ templateName: template.name, component: name, default: byDefault });
+            notify(`Component "${name}" added`, 'success');
+            setName('');
+            reload();
+        } catch (e) { notify((e as Error).message, 'error'); }
+    };
+
+    const addDir = async () => {
+        try { const r = await api.addDir({ dir }); notify(`Registered ${r.dir}`, 'success'); setDir(''); reload(); }
+        catch (e) { notify((e as Error).message, 'error'); }
+    };
+
     return (
-        <Section title="Variables">
-            <VariablesPanel template={template} notify={notify} reload={reload} />
-        </Section>
+        <>
+            <Field label="Component" control={
+                <Stack direction="row" spacing={1}>
+                    <PanelInput fullWidth placeholder="Modal" value={name} onChange={(e) => setName(e.target.value)} />
+                    <Button size="small" variant="contained" onClick={addComponent} sx={{ flexShrink: 0 }}>Add</Button>
+                </Stack>
+            } />
+            <SwitchField label="Included by default" checked={byDefault} onChange={setByDefault} />
+            <Divider sx={{ my: 0.5 }} />
+            <Field label="External dir" control={
+                <Stack direction="row" spacing={1}>
+                    <PanelInput fullWidth placeholder="C:\\path\\to\\templates" value={dir} onChange={(e) => setDir(e.target.value)} />
+                    <Button size="small" variant="outlined" onClick={addDir} sx={{ flexShrink: 0 }}>Add</Button>
+                </Stack>
+            } />
+        </>
     );
 }
 
 /* -------------------------------- Generate ------------------------------- */
 
-function GenerateSection({ template, state, notify, onResult }: SectionProps & { onResult: (r: unknown) => void }) {
+function GenerateBody({ template, state, notify, onResult }: SectionProps & { onResult: (r: unknown) => void }) {
     const { prompt } = useDialogs();
     const [answers, setAnswers] = useState<Record<string, string>>({});
     const [features, setFeatures] = useState<Record<string, boolean | string>>({});
@@ -137,13 +177,12 @@ function GenerateSection({ template, state, notify, onResult }: SectionProps & {
     const tk = (t: string) => `${template.tokenConfig.start}${t}${template.tokenConfig.end}`;
 
     return (
-        <Section
-            title="Generate to folder"
-            description={<>Replaces every {tk('token')} with the values below and merges the result into the target folder (created if missing, existing files kept). For a downloadable zip of the published version, use Export in the top bar.</>}
-        >
-            {template.variables.length > 0 && (
-                <Typography variant="overline" color="text.secondary" sx={{ fontSize: 9.5 }}>Variable values</Typography>
-            )}
+        <>
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11, mb: 0.5 }}>
+                Replaces every {tk('token')} with the values below and merges into the target folder (created if missing,
+                existing files kept). For a zip of the published version use Export in the top bar.
+            </Typography>
+            {template.variables.length > 0 && <GroupLabel>Variable values</GroupLabel>}
             {template.variables.map((v) => (
                 <Field key={v.name} label={<Box component="span" sx={{ fontFamily: 'ui-monospace, monospace', color: 'secondary.main' }}>{tk(v.token)}</Box>}
                     control={
@@ -157,9 +196,7 @@ function GenerateSection({ template, state, notify, onResult }: SectionProps & {
                     } />
             ))}
 
-            {template.features.length > 0 && (
-                <Typography variant="overline" color="text.secondary" sx={{ fontSize: 9.5, mt: 0.5 }}>Features</Typography>
-            )}
+            {template.features.length > 0 && <GroupLabel>Features</GroupLabel>}
             {template.features.map((f) => (
                 f.type === 'select' ? (
                     <Field key={f.id} label={f.label} control={
@@ -180,13 +217,13 @@ function GenerateSection({ template, state, notify, onResult }: SectionProps & {
                 <Button variant="contained" startIcon={<RocketLaunchIcon />} onClick={generate}>Generate</Button>
                 <Button variant="outlined" onClick={savePreset}>Save preset…</Button>
             </Stack>
-        </Section>
+        </>
     );
 }
 
 /* --------------------------- Publish to registry ------------------------- */
 
-function PublishSection({ template, notify, reload }: SectionProps) {
+function PublishBody({ template, notify, reload }: SectionProps) {
     const { confirm } = useDialogs();
     const [bump, setBump] = useState<'none' | 'patch' | 'minor' | 'major'>('patch');
     const [versions, setVersions] = useState<PublishedVersion[]>([]);
@@ -216,11 +253,10 @@ function PublishSection({ template, notify, reload }: SectionProps) {
     };
 
     return (
-        <Section
-            title="Publish to registry"
-            defaultOpen={false}
-            description={<>Publishes a versioned snapshot — placeholders intact — to the local registry. The CLI uses the latest published version.</>}
-        >
+        <>
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11, mb: 0.5 }}>
+                Publishes a versioned snapshot — placeholders intact — to the local registry. The CLI uses the latest published version.
+            </Typography>
             <Field label="Version bump" control={
                 <PanelSelect value={bump} onChange={(v) => setBump(v as typeof bump)} sx={{ width: 150 }}
                     options={[{ value: 'none', label: `none (${template.version})` }, { value: 'patch' }, { value: 'minor' }, { value: 'major' }]} />
@@ -236,48 +272,7 @@ function PublishSection({ template, notify, reload }: SectionProps) {
                     ))}
                 </Stack>
             } />
-        </Section>
-    );
-}
-
-/* ------------------------------- Components ------------------------------ */
-
-function ComponentsSection({ template, notify, reload }: SectionProps) {
-    const [name, setName] = useState('');
-    const [byDefault, setByDefault] = useState(false);
-    const [dir, setDir] = useState('');
-
-    const addComponent = async () => {
-        try {
-            await api.addComponent({ templateName: template.name, component: name, default: byDefault });
-            notify(`Component "${name}" added`, 'success');
-            setName('');
-            reload();
-        } catch (e) { notify((e as Error).message, 'error'); }
-    };
-
-    const addDir = async () => {
-        try { const r = await api.addDir({ dir }); notify(`Registered ${r.dir}`, 'success'); setDir(''); reload(); }
-        catch (e) { notify((e as Error).message, 'error'); }
-    };
-
-    return (
-        <Section title="Components & dirs" defaultOpen={false} description="Scaffold a component + a feature toggle for it.">
-            <Field label="Component" control={
-                <Stack direction="row" spacing={1}>
-                    <PanelInput fullWidth placeholder="Modal" value={name} onChange={(e) => setName(e.target.value)} />
-                    <Button size="small" variant="contained" onClick={addComponent} sx={{ flexShrink: 0 }}>Add</Button>
-                </Stack>
-            } />
-            <SwitchField label="Included by default" checked={byDefault} onChange={setByDefault} />
-            <Divider sx={{ my: 0.5 }} />
-            <Field label="External dir" control={
-                <Stack direction="row" spacing={1}>
-                    <PanelInput fullWidth placeholder="C:\\path\\to\\templates" value={dir} onChange={(e) => setDir(e.target.value)} />
-                    <Button size="small" variant="outlined" onClick={addDir} sx={{ flexShrink: 0 }}>Add</Button>
-                </Stack>
-            } />
-        </Section>
+        </>
     );
 }
 
@@ -292,10 +287,14 @@ interface PanelProps {
     onRenamed: (name: string) => void;
 }
 
+type PanelTab = 'variables' | 'generate' | 'settings' | 'publish';
+
 export function RightPanel({ template, state, notify, reload, onResult, onRenamed }: PanelProps) {
+    const [tab, setTab] = useState<PanelTab>('variables');
+
     return (
-        <Box sx={{ height: '100%', overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
-            <Box sx={{ px: 2, py: 1.5, borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper', position: 'sticky', top: 0, zIndex: 1 }}>
+        <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <Box sx={{ px: 2, py: 1.25, borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
                 <Stack direction="row" spacing={1} alignItems="center">
                     <Box sx={{ minWidth: 0, flex: 1 }}>
                         <Typography variant="subtitle2" noWrap title={template.name}>{template.title || template.name}</Typography>
@@ -304,12 +303,31 @@ export function RightPanel({ template, state, notify, reload, onResult, onRename
                     <Chip size="small" label={`v${template.version}`} color="primary" variant="outlined" sx={{ height: 20 }} />
                 </Stack>
             </Box>
-            <Box sx={{ flex: 1, overflow: 'auto', '& > div + div': { borderTop: 1, borderColor: 'divider' } }}>
-                <TemplateSection template={template} state={state} notify={notify} reload={reload} onRenamed={onRenamed} />
-                <VariablesSection template={template} state={state} notify={notify} reload={reload} />
-                <GenerateSection template={template} state={state} notify={notify} reload={reload} onResult={onResult} />
-                <PublishSection template={template} state={state} notify={notify} reload={reload} />
-                <ComponentsSection template={template} state={state} notify={notify} reload={reload} />
+            <Tabs
+                value={tab} onChange={(_, v) => setTab(v)} variant="scrollable" scrollButtons="auto"
+                sx={{ minHeight: 36, borderBottom: 1, borderColor: 'divider', '& .MuiTab-root': { minHeight: 36, minWidth: 0, px: 1.5, fontSize: 12 } }}
+            >
+                <Tab value="variables" label="Variables" />
+                <Tab value="generate" label="Generate" />
+                <Tab value="settings" label="Settings" />
+                <Tab value="publish" label="Publish" />
+            </Tabs>
+            <Box sx={{ flex: 1, overflow: 'auto' }}>
+                {tab === 'variables' && (
+                    <Box sx={{ px: 1.5, py: 1.5 }}>
+                        <VariablesPanel template={template} notify={notify} reload={reload} />
+                    </Box>
+                )}
+                {tab === 'generate' && <TabBody><GenerateBody template={template} state={state} notify={notify} reload={reload} onResult={onResult} /></TabBody>}
+                {tab === 'settings' && (
+                    <TabBody>
+                        <TemplateBody template={template} state={state} notify={notify} reload={reload} onRenamed={onRenamed} />
+                        <Divider sx={{ my: 1 }} />
+                        <GroupLabel>Components &amp; dirs</GroupLabel>
+                        <ComponentsBody template={template} state={state} notify={notify} reload={reload} />
+                    </TabBody>
+                )}
+                {tab === 'publish' && <TabBody><PublishBody template={template} state={state} notify={notify} reload={reload} /></TabBody>}
             </Box>
         </Box>
     );
