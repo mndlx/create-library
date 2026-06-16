@@ -274,8 +274,8 @@ export function RightPanel({ template, state, notify, reload, onResult, onRename
     const [tab, setTab] = useState<PanelTab>('variables');
 
     return (
-        <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-            <Box sx={{ px: 2, py: 1.25, borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
+        <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: 'var(--glass-bg)', backdropFilter: 'blur(18px)' }}>
+            <Box sx={{ px: 2, py: 1.25, borderBottom: 1, borderColor: 'divider', backgroundImage: 'linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0))' }}>
                 <Stack direction="row" spacing={1} alignItems="center">
                     <Box sx={{ minWidth: 0, flex: 1 }}>
                         <Typography variant="subtitle2" noWrap title={template.name}>{template.title || template.name}</Typography>

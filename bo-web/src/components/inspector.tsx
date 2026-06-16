@@ -22,14 +22,14 @@ const LABEL_COL = 112;
 
 const inputSx = {
     '& .MuiFilledInput-root': {
-        borderRadius: '5px',
-        backgroundColor: alpha('#000', 0.25),
+        borderRadius: '8px',
+        backgroundColor: alpha('#0c0e1a', 0.38),
         border: '1px solid',
-        borderColor: 'divider',
+        borderColor: alpha('#fff', 0.1),
         minHeight: 0,
-        transition: 'border-color .12s, background-color .12s',
-        '&:hover': { backgroundColor: alpha('#000', 0.3) },
-        '&.Mui-focused': { borderColor: 'primary.main', backgroundColor: alpha('#000', 0.3) },
+        transition: 'border-color .12s, background-color .12s, box-shadow .12s',
+        '&:hover': { backgroundColor: alpha('#0c0e1a', 0.46), borderColor: alpha('#7b86ff', 0.4) },
+        '&.Mui-focused': { borderColor: 'primary.main', backgroundColor: alpha('#0c0e1a', 0.5), boxShadow: `0 0 0 3px ${alpha('#7b86ff', 0.18)}` },
     },
     '& .MuiFilledInput-input': { padding: '3px 8px', fontSize: 12, lineHeight: '18px', height: 'auto' },
     '& textarea.MuiFilledInput-input': { padding: '3px 8px' },

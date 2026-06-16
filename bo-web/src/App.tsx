@@ -26,6 +26,7 @@ import Stack from '@mui/material/Stack';
 import Toolbar from '@mui/material/Toolbar';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import { alpha } from '@mui/material/styles';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, type AppState, type FileTarget, type Template } from './api';
 import { CreateTemplateDialog } from './components/CreateTemplateDialog';
@@ -195,8 +196,8 @@ export function App() {
             <AppBar position="fixed" sx={{ zIndex: (t) => t.zIndex.drawer + 1 }}>
                 <Toolbar variant="dense">
                     <Box sx={{
-                        width: 28, height: 28, mr: 1.25, borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        background: 'linear-gradient(135deg, #5b9dff 0%, #4ade80 100%)', color: '#06121f',
+                        width: 30, height: 30, mr: 1.25, borderRadius: '9px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        backgroundImage: 'var(--primary-grad)', color: '#fff', boxShadow: '0 6px 16px -6px rgba(108,123,255,0.8)',
                     }}>
                         <CodeIcon sx={{ fontSize: 18 }} />
                     </Box>
@@ -233,18 +234,29 @@ export function App() {
                         <Tooltip title="Refresh"><IconButton size="small" onClick={reload}><RefreshIcon fontSize="small" /></IconButton></Tooltip>
                     </Stack>
                     <Divider />
-                    <List dense sx={{ overflow: 'auto', flex: 1 }}>
-                        {state.templates.map((t) => (
+                    <List dense sx={{ overflow: 'auto', flex: 1, px: 0.5, py: 1 }}>
+                        {state.templates.map((t) => {
+                            const active = !workspace && t.name === selected;
+                            return (
                             <ListItemButton
-                                key={t.name} selected={!workspace && t.name === selected}
+                                key={t.name} selected={active}
                                 onClick={() => selectTemplate(t.name)}
                                 onContextMenu={(e) => { e.preventDefault(); setTplMenu({ x: e.clientX, y: e.clientY, name: t.name }); }}
+                                sx={{
+                                    mb: 0.75, mx: 0.5, px: 1.25, py: 1, borderRadius: '14px', alignItems: 'flex-start',
+                                    border: '1px solid', borderColor: active ? alpha('#7b86ff', 0.5) : 'var(--glass-border)',
+                                    bgcolor: active ? alpha('#7b86ff', 0.16) : 'var(--glass-card)',
+                                    boxShadow: active ? 'var(--glow-primary)' : 'none',
+                                    '&.Mui-selected': { bgcolor: alpha('#7b86ff', 0.16), boxShadow: 'var(--glow-primary)', '&:hover': { bgcolor: alpha('#7b86ff', 0.22) } },
+                                    '&:hover': { borderColor: alpha('#7b86ff', 0.35), bgcolor: alpha('#fff', 0.05) },
+                                }}
                             >
                                 <ListItemText
                                     primary={
                                         <Stack direction="row" spacing={1} alignItems="center">
-                                            <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>{t.name}</Typography>
-                                            <Chip size="small" label={`v${t.version}`} variant="outlined" sx={{ height: 17, fontSize: 10, '& .MuiChip-label': { px: 0.75 } }} />
+                                            <Typography variant="body2" noWrap sx={{ fontWeight: 600, color: active ? '#fff' : 'text.primary' }}>{t.name}</Typography>
+                                            <Box sx={{ flex: 1 }} />
+                                            <Chip size="small" label={`v${t.version}`} variant="outlined" color={active ? 'primary' : 'default'} sx={{ height: 17, fontSize: 10, '& .MuiChip-label': { px: 0.75 } }} />
                                         </Stack>
                                     }
                                     secondary={
@@ -254,7 +266,8 @@ export function App() {
                                     }
                                 />
                             </ListItemButton>
-                        ))}
+                            );
+                        })}
                         {!state.templates.length && (
                             <Stack spacing={1} sx={{ px: 2, py: 1 }}>
                                 <Typography variant="body2" color="text.secondary">No templates yet.</Typography>

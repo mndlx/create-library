@@ -63,6 +63,25 @@ const configureMonaco = (monaco: any) => {
     ts.typescriptDefaults.setDiagnosticsOptions(diag);
     ts.javascriptDefaults.setCompilerOptions(compilerOptions);
     ts.javascriptDefaults.setDiagnosticsOptions(diag);
+
+    // Tint the editor to match the app's indigo glass instead of vs-dark grey.
+    monaco.editor.defineTheme('cl-glass', {
+        base: 'vs-dark',
+        inherit: true,
+        rules: [],
+        colors: {
+            'editor.background': '#181b2c',
+            'editorGutter.background': '#181b2c',
+            'minimap.background': '#181b2c',
+            'editor.lineHighlightBackground': '#ffffff0d',
+            'editorLineNumber.foreground': '#5b6080',
+            'editorLineNumber.activeForeground': '#a6abc8',
+            'editor.selectionBackground': '#6d7bff44',
+            'editorIndentGuide.background1': '#ffffff0f',
+            'editorWidget.background': '#222742',
+            'editorWidget.border': '#ffffff1f',
+        },
+    });
 };
 
 interface OpenTab {
@@ -331,7 +350,7 @@ export function EditorView({ target, targetKey, notify, onDirtyChange }: Props) 
     };
 
     return (
-        <Box sx={{ display: 'flex', height: '100%', minHeight: 0 }}>
+        <Box sx={{ display: 'flex', height: '100%', minHeight: 0, bgcolor: 'rgba(20,23,40,0.5)', backdropFilter: 'blur(18px)' }}>
             {/* File explorer pane */}
             <Box sx={{ width: explorerW, flexShrink: 0, borderColor: 'divider', display: 'flex', flexDirection: 'column' }}>
                 <Stack direction="row" alignItems="center" sx={{ px: 1, py: 0.5 }}>
@@ -387,12 +406,14 @@ export function EditorView({ target, targetKey, notify, onDirtyChange }: Props) 
                             sx={{
                                 display: 'flex', alignItems: 'center', gap: 0.5, px: 1.5, py: 1, cursor: 'pointer',
                                 borderRight: 1, borderColor: 'divider', whiteSpace: 'nowrap',
-                                bgcolor: active === t.path ? 'background.default' : 'transparent',
+                                bgcolor: active === t.path ? '#181b2c' : 'transparent',
                                 borderBottom: active === t.path ? 2 : 0, borderBottomColor: 'primary.main',
+                                color: active === t.path ? 'text.primary' : 'text.secondary',
+                                '&:hover': { bgcolor: active === t.path ? '#181b2c' : 'rgba(255,255,255,0.04)' },
                             }}
                         >
                             <Typography variant="body2" sx={{ fontFamily: 'ui-monospace, monospace' }}>
-                                {t.content !== t.saved ? '● ' : ''}{t.name}
+                                {t.content !== t.saved ? <Box component="span" sx={{ color: 'secondary.main' }}>● </Box> : ''}{t.name}
                             </Typography>
                             <IconButton size="small" sx={{ p: 0.25 }} onClick={(e) => { e.stopPropagation(); closeTab(t.path); }}>
                                 <CloseIcon sx={{ fontSize: 14 }} />
@@ -418,7 +439,7 @@ export function EditorView({ target, targetKey, notify, onDirtyChange }: Props) 
                         <Box sx={{ p: 3, color: 'text.secondary' }}>Binary file — not editable.</Box>
                     ) : (
                         <Editor
-                            theme="vs-dark"
+                            theme="cl-glass"
                             beforeMount={configureMonaco}
                             path={`${targetKey}/${current.path}`}
                             language={langOf(current.path)}
