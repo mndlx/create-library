@@ -37,7 +37,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const child_process_1 = require("child_process");
 const fs = __importStar(require("fs"));
 const http = __importStar(require("http"));
-const os = __importStar(require("os"));
 const path = __importStar(require("path"));
 const engine_1 = require("../engine");
 const PORT = Number(process.env.PORT) || 4517;
@@ -63,37 +62,49 @@ const readBody = (req) => new Promise((resolve, reject) => {
     });
     req.on('error', reject);
 });
-const serialize = (t) => ({
-    name: t.manifest.name,
-    title: t.manifest.title ?? t.manifest.name,
-    description: t.manifest.description ?? '',
-    output: (0, engine_1.outputModeOf)(t),
-    nameVar: (0, engine_1.nameVarOf)(t),
-    dir: t.dir,
-    version: t.manifest.version ?? '1.0.0',
-    prompts: t.manifest.prompts,
-    features: t.manifest.features ?? [],
-    tokenConfig: (0, engine_1.tokenConfigOf)(t),
-    variables: (0, engine_1.resolveVariables)(t),
-    foreignTokens: (0, engine_1.detectForeignTokens)(t),
-});
+/* ------------------------- dotnet template registry ---------------------- */
+const listTemplates = () => {
+    const out = [];
+    const seen = new Set();
+    for (const root of (0, engine_1.resolveTemplateDirs)()) {
+        for (const t of (0, engine_1.listDotnetTemplatesIn)(root)) {
+            if (seen.has(t.shortName))
+                continue;
+            seen.add(t.shortName);
+            out.push(t);
+        }
+    }
+    return out;
+};
 const requireTemplate = (name) => {
-    const t = (0, engine_1.findTemplate)(name);
+    const t = listTemplates().find((x) => x.shortName === name);
     if (!t)
         throw new Error(`Unknown template: ${name}`);
     return t;
 };
-/** Resolve a template-relative path, refusing anything that escapes the template dir. */
+const serialize = (t) => ({
+    name: t.shortName,
+    shortName: t.shortName,
+    identity: t.identity,
+    title: t.name,
+    author: t.author ?? '',
+    sourceName: t.sourceName ?? '',
+    classifications: t.classifications,
+    tags: t.tags,
+    dir: t.dir,
+    symbols: t.symbols,
+});
+/* ------------------------------- file utils ----------------------------- */
+/** Resolve a template-relative path, refusing anything that escapes the base dir. */
 const safeJoin = (baseDir, rel) => {
     const full = path.resolve(baseDir, rel || '.');
     const base = path.resolve(baseDir);
-    if (full !== base && !full.startsWith(base + path.sep)) {
+    if (full !== base && !full.startsWith(base + path.sep))
         throw new Error(`Path escapes template: ${rel}`);
-    }
     return full;
 };
-const IGNORED_DIRS = new Set(['node_modules', '.git', 'dist', '.vs']);
-/** Recursively list a template's files as a tree (dirs first, alphabetical). */
+const IGNORED_DIRS = new Set(['node_modules', '.git', 'dist', '.vs', 'bin', 'obj']);
+/** Recursively list a directory's files as a tree (dirs first, alphabetical). */
 const buildTree = (baseDir, dir) => {
     const entries = fs.readdirSync(dir, { withFileTypes: true });
     const nodes = [];
@@ -102,25 +113,19 @@ const buildTree = (baseDir, dir) => {
             continue;
         const full = path.join(dir, e.name);
         const rel = path.relative(baseDir, full).split(path.sep).join('/');
-        if (e.isDirectory()) {
+        if (e.isDirectory())
             nodes.push({ name: e.name, path: rel, type: 'dir', children: buildTree(baseDir, full) });
-        }
-        else {
+        else
             nodes.push({ name: e.name, path: rel, type: 'file' });
-        }
     }
-    nodes.sort((a, b) => a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'dir' ? -1 : 1);
+    nodes.sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'dir' ? -1 : 1));
     return nodes;
 };
-/**
- * Move `from` onto an existing `to`: same-name directories merge recursively,
- * conflicting files are replaced by the incoming ones.
- */
+/** Move `from` onto an existing `to`: same-name dirs merge, conflicting files replaced. */
 const moveMerge = (from, to) => {
     if (fs.existsSync(to) && fs.statSync(from).isDirectory() && fs.statSync(to).isDirectory()) {
-        for (const entry of fs.readdirSync(from)) {
+        for (const entry of fs.readdirSync(from))
             moveMerge(path.join(from, entry), path.join(to, entry));
-        }
         fs.rmdirSync(from);
         return;
     }
@@ -135,10 +140,7 @@ const isProbablyBinary = (buf) => {
             return true;
     return false;
 };
-/**
- * Resolve the base directory the file APIs operate inside. Either a registered
- * template (by name) or an arbitrary `root` directory ("open a workspace").
- */
+/** Base dir for the file APIs: a registered template (by name) or any `root`. */
 const resolveBase = (q) => {
     if (q.root && q.root.trim()) {
         const dir = path.resolve(q.root.trim());
@@ -150,76 +152,34 @@ const resolveBase = (q) => {
         return requireTemplate(q.template).dir;
     throw new Error('Provide a "template" or a "root" directory');
 };
-const componentTsx = (name) => `import * as React from 'react';\n\n` +
-    `export interface ${name}Props extends React.HTMLAttributes<HTMLDivElement> {}\n\n` +
-    `export const ${name} = React.forwardRef<HTMLDivElement, ${name}Props>((props, ref) => (\n` +
-    `    <div ref={ref} {...props} />\n));\n\n` +
-    `${name}.displayName = '${name}';\n`;
-function addComponent(t, rawName, onByDefault) {
-    const comp = String(rawName || '').trim().replace(/[^A-Za-z0-9]/g, '');
-    if (!comp)
-        throw new Error('A component name is required');
-    const featureId = comp.toLowerCase();
-    const barrel = path.join(t.sourceDir, 'src', 'components', 'index.ts');
-    fs.mkdirSync(path.dirname(barrel), { recursive: true });
-    if (!fs.existsSync(barrel))
-        fs.writeFileSync(barrel, '/* inject:componentExports */\n');
-    else if (!fs.readFileSync(barrel, 'utf8').includes('/* inject:componentExports */')) {
-        fs.appendFileSync(barrel, '\n/* inject:componentExports */\n');
-    }
-    const overlayRel = path.join('features', featureId);
-    const compDir = path.join(t.dir, overlayRel, 'src', 'components', comp);
-    fs.mkdirSync(compDir, { recursive: true });
-    fs.writeFileSync(path.join(compDir, `${comp}.tsx`), componentTsx(comp));
-    fs.writeFileSync(path.join(compDir, 'index.ts'), `export * from './${comp}';\n`);
-    const m = (0, engine_1.readRawManifest)(t.dir);
-    m.features = m.features || [];
-    if (m.features.some((f) => f.id === featureId))
-        throw new Error(`Feature "${featureId}" already exists`);
-    m.features.push({
-        id: featureId,
-        label: `Include the ${comp} component`,
-        type: 'boolean',
-        default: onByDefault,
-        overlay: overlayRel.split(path.sep).join('/'),
-        inject: [{ file: 'src/components/index.ts', marker: 'componentExports', content: `export * from './${comp}';` }],
-    });
-    const errors = (0, engine_1.validateManifest)(m);
-    if (errors.length)
-        throw new Error(errors.join('; '));
-    (0, engine_1.writeRawManifest)(t.dir, m);
-}
+const writeSymbol = (dir, s) => {
+    const m = (0, engine_1.readDotnetManifest)(dir);
+    m.symbols = m.symbols || {};
+    const sym = { type: 'parameter', datatype: s.datatype || 'string' };
+    if (s.defaultValue !== undefined && s.defaultValue !== '')
+        sym.defaultValue = s.defaultValue;
+    if (s.replaces)
+        sym.replaces = s.replaces;
+    if (s.description)
+        sym.description = s.description;
+    if (s.datatype === 'choice')
+        sym.choices = (s.choices ?? []).filter(Boolean).map((c) => ({ choice: c }));
+    m.symbols[s.name] = sym;
+    (0, engine_1.writeDotnetManifest)(dir, m);
+};
+/* --------------------------------- API ---------------------------------- */
 async function handleApi(req, res, pathname, query) {
     if (req.method === 'GET' && pathname === '/api/state') {
-        return sendJson(res, 200, {
-            templates: (0, engine_1.listTemplates)().map(serialize),
-            dirs: (0, engine_1.resolveTemplateDirs)(),
-            cwd: process.cwd(),
-        });
+        return sendJson(res, 200, { templates: listTemplates().map(serialize), dirs: (0, engine_1.resolveTemplateDirs)(), cwd: process.cwd() });
     }
     const body = req.method === 'POST' ? await readBody(req) : {};
+    // Generate a project from a dotnet template via the .NET CLI.
     if (req.method === 'POST' && pathname === '/api/generate') {
         const t = requireTemplate(body.templateName);
-        const answers = body.answers || {};
-        const features = body.features || {};
-        const mode = body.mode || (0, engine_1.outputModeOf)(t);
         const into = path.resolve(body.into || process.cwd());
-        const includeManifest = !!body.includeManifest;
-        if (mode === 'merge') {
-            fs.mkdirSync(into, { recursive: true }); // merging into a fresh folder is fine
-            const { tokens, report } = (0, engine_1.mergeInto)({ template: t, projectDir: into, answers, features, force: !!body.force, includeManifest });
-            return sendJson(res, 200, { ok: true, mode, into, report, nextSteps: (0, engine_1.renderNextSteps)(t, tokens) });
-        }
-        const name = answers[(0, engine_1.nameVarOf)(t)] || t.manifest.name;
-        const targetDir = path.join(into, name);
-        const { tokens } = (0, engine_1.generate)({ template: t, targetDir, answers, features, includeManifest });
-        return sendJson(res, 200, { ok: true, mode, targetDir, nextSteps: (0, engine_1.renderNextSteps)(t, tokens) });
-    }
-    if (req.method === 'POST' && pathname === '/api/preset') {
-        const t = requireTemplate(body.templateName);
-        const file = path.resolve(body.file || `${t.manifest.name}.preset.json`);
-        (0, engine_1.savePreset)(file, { template: t.manifest.name, answers: body.answers || {}, features: body.features || {} });
-        return sendJson(res, 200, { ok: true, file });
+        fs.mkdirSync(into, { recursive: true });
+        const output = (0, engine_1.generateDotnet)({ template: t, outDir: into, name: body.name || undefined, params: body.params || {}, force: !!body.force });
+        return sendJson(res, 200, { ok: true, into, output });
     }
     if (req.method === 'POST' && pathname === '/api/create-template') {
         const name = String(body.name || '').trim();
@@ -227,51 +187,47 @@ async function handleApi(req, res, pathname, query) {
             throw new Error('A template name is required');
         const rootDir = path.resolve(body.rootDir && String(body.rootDir).trim() ? body.rootDir : process.cwd());
         fs.mkdirSync(rootDir, { recursive: true });
-        const opts = {
-            rootDir,
-            name,
-            title: body.title,
-            description: body.description,
-            output: (body.output === 'merge' ? 'merge' : 'new'),
-            source: body.source === '.' ? '.' : 'template',
-        };
-        // If importFrom is given, copy that directory as the payload; else scaffold samples.
-        const dir = body.importFrom && String(body.importFrom).trim()
-            ? (0, engine_1.importTemplate)({ ...opts, importFrom: String(body.importFrom).trim() })
-            : (0, engine_1.scaffoldTemplate)(opts);
-        // Make the new template discoverable by registering its parent directory.
+        const dir = (0, engine_1.scaffoldDotnetTemplate)({
+            rootDir, name,
+            shortName: body.shortName ? String(body.shortName) : undefined,
+            author: body.author ? String(body.author) : undefined,
+            sourceName: body.sourceName ? String(body.sourceName) : undefined,
+        });
         if (!(0, engine_1.resolveTemplateDirs)().includes(rootDir))
             (0, engine_1.addTemplateDir)(rootDir);
-        return sendJson(res, 200, { ok: true, dir, name });
+        const created = (0, engine_1.parseDotnetTemplate)(dir);
+        return sendJson(res, 200, { ok: true, dir, name: created.shortName });
     }
-    if (req.method === 'POST' && pathname === '/api/add-variable') {
+    // Edit manifest metadata.
+    if (req.method === 'POST' && pathname === '/api/set-meta') {
         const t = requireTemplate(body.templateName);
-        const m = (0, engine_1.readRawManifest)(t.dir);
-        m.prompts = m.prompts || [];
-        m.prompts.push(body.prompt);
-        const errors = (0, engine_1.validateManifest)(m);
-        if (errors.length)
-            throw new Error(errors.join('; '));
-        (0, engine_1.writeRawManifest)(t.dir, m);
+        const m = (0, engine_1.readDotnetManifest)(t.dir);
+        if (body.title !== undefined)
+            m.name = String(body.title);
+        if (body.author !== undefined)
+            m.author = String(body.author);
+        if (body.sourceName !== undefined)
+            m.sourceName = String(body.sourceName);
+        if (body.classifications !== undefined)
+            m.classifications = String(body.classifications).split(',').map((s) => s.trim()).filter(Boolean);
+        (0, engine_1.writeDotnetManifest)(t.dir, m);
         return sendJson(res, 200, { ok: true });
     }
-    // Rename a template: update the manifest name and, when the folder is
-    // named after the template, rename the folder too.
+    // Rename: change shortName/identity and, when the folder matches, rename it.
     if (req.method === 'POST' && pathname === '/api/rename-template') {
         const t = requireTemplate(body.templateName);
         const newName = String(body.newName || '').trim();
         if (!newName)
             throw new Error('A new name is required');
-        if (newName !== t.manifest.name && (0, engine_1.findTemplate)(newName))
-            throw new Error(`A template named "${newName}" already exists`);
-        const m = (0, engine_1.readRawManifest)(t.dir);
-        m.name = newName;
-        const errors = (0, engine_1.validateManifest)(m);
-        if (errors.length)
-            throw new Error(errors.join('; '));
-        (0, engine_1.writeRawManifest)(t.dir, m);
+        if (newName !== t.shortName && listTemplates().some((x) => x.shortName === newName))
+            throw new Error(`A template "${newName}" already exists`);
+        const m = (0, engine_1.readDotnetManifest)(t.dir);
+        m.shortName = newName;
+        if (!m.identity || m.identity === t.identity)
+            m.identity = newName;
+        (0, engine_1.writeDotnetManifest)(t.dir, m);
         let dir = t.dir;
-        if (path.basename(t.dir) === body.templateName) {
+        if (path.basename(t.dir) === t.shortName) {
             const dest = path.join(path.dirname(t.dir), newName);
             if (!fs.existsSync(dest)) {
                 fs.renameSync(t.dir, dest);
@@ -280,136 +236,25 @@ async function handleApi(req, res, pathname, query) {
         }
         return sendJson(res, 200, { ok: true, name: newName, dir });
     }
-    // Delete a template's working copy (and optionally its published versions).
     if (req.method === 'POST' && pathname === '/api/delete-template') {
         const t = requireTemplate(body.templateName);
         fs.rmSync(t.dir, { recursive: true, force: true });
-        if (body.deletePublished) {
-            fs.rmSync(path.join((0, engine_1.publishedRoot)(), t.manifest.name), { recursive: true, force: true });
-        }
         return sendJson(res, 200, { ok: true });
     }
-    // Update manifest metadata (title, description, version, output).
-    if (req.method === 'POST' && pathname === '/api/set-meta') {
+    if (req.method === 'POST' && pathname === '/api/set-symbol') {
         const t = requireTemplate(body.templateName);
-        const m = (0, engine_1.readRawManifest)(t.dir);
-        if (body.title !== undefined)
-            m.title = String(body.title);
-        if (body.description !== undefined)
-            m.description = String(body.description);
-        if (body.version !== undefined)
-            m.version = String(body.version);
-        if (body.output !== undefined)
-            m.output = body.output === 'merge' ? 'merge' : 'new';
-        const errors = (0, engine_1.validateManifest)(m);
-        if (errors.length)
-            throw new Error(errors.join('; '));
-        (0, engine_1.writeRawManifest)(t.dir, m);
+        const s = body.symbol;
+        if (!s || !s.name || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(s.name))
+            throw new Error('A valid symbol name is required');
+        writeSymbol(t.dir, s);
         return sendJson(res, 200, { ok: true });
     }
-    // Export (publish) a snapshot of the template into the local registry.
-    if (req.method === 'POST' && pathname === '/api/export') {
+    if (req.method === 'POST' && pathname === '/api/remove-symbol') {
         const t = requireTemplate(body.templateName);
-        const bump = ['patch', 'minor', 'major'].includes(body.bump) ? body.bump : undefined;
-        const result = (0, engine_1.exportTemplate)(t, { bump, overwrite: !!body.overwrite });
-        return sendJson(res, 200, { ok: true, ...result });
-    }
-    if (req.method === 'GET' && pathname === '/api/published') {
-        return sendJson(res, 200, { ok: true, versions: (0, engine_1.listPublishedVersions)(query.template || undefined) });
-    }
-    // The latest published snapshot of a template, serialized like /api/state entries.
-    if (req.method === 'GET' && pathname === '/api/published-template') {
-        const pub = (0, engine_1.listPublishedVersions)(query.template || '')[0];
-        if (!pub)
-            return sendJson(res, 200, { ok: true, published: null });
-        return sendJson(res, 200, { ok: true, published: serialize((0, engine_1.loadManifest)(pub.dir)) });
-    }
-    // Export: generate from the latest PUBLISHED snapshot with the given values
-    // and stream the result as a zip (same engine path the CLI generation uses).
-    if (req.method === 'POST' && pathname === '/api/export-zip') {
-        const name = String(body.templateName || '');
-        const pub = (0, engine_1.listPublishedVersions)(name)[0];
-        if (!pub)
-            throw new Error(`No published version of "${name}". Publish one first.`);
-        const t = (0, engine_1.loadManifest)(pub.dir);
-        const stagingRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'vlcl-zip-'));
-        const tree = path.join(stagingRoot, 'tree');
-        try {
-            (0, engine_1.assemble)(t, tree, body.answers || {}, body.features || {}, !!body.includeManifest);
-            const zip = (0, engine_1.zipDirectory)(tree);
-            res.writeHead(200, {
-                'Content-Type': 'application/zip',
-                'Content-Disposition': `attachment; filename="${pub.name}-${pub.version}.zip"`,
-                'Cache-Control': 'no-store',
-            });
-            res.end(zip);
-        }
-        finally {
-            fs.rmSync(stagingRoot, { recursive: true, force: true });
-        }
-        return;
-    }
-    if (req.method === 'POST' && pathname === '/api/set-token-config') {
-        const t = requireTemplate(body.templateName);
-        const start = String(body.start ?? '').trim();
-        const end = String(body.end ?? '').trim();
-        if (!start || !end)
-            throw new Error('start and end delimiters are required');
-        const m = (0, engine_1.readRawManifest)(t.dir);
-        m.tokenConfig = { start, end };
-        const errors = (0, engine_1.validateManifest)(m);
-        if (errors.length)
-            throw new Error(errors.join('; '));
-        (0, engine_1.writeRawManifest)(t.dir, m);
-        return sendJson(res, 200, { ok: true });
-    }
-    // Upsert a token's metadata (message, default, type, options, validate, exposeCli).
-    if (req.method === 'POST' && pathname === '/api/set-variable') {
-        const t = requireTemplate(body.templateName);
-        const v = body.variable;
-        if (!v || !v.name)
-            throw new Error('variable.name is required');
-        const m = (0, engine_1.readRawManifest)(t.dir);
-        m.prompts = m.prompts || [];
-        const token = v.token || v.name;
-        const idx = m.prompts.findIndex((p) => (p.token || p.name) === token);
-        const next = {
-            name: v.name,
-            message: v.message || v.name,
-            type: v.type === 'select' ? 'select' : 'text',
-            token,
-            default: v.default,
-            validate: v.validate,
-            options: v.type === 'select' ? v.options : undefined,
-            exposeCli: v.exposeCli !== false,
-        };
-        if (idx >= 0)
-            m.prompts[idx] = next;
-        else
-            m.prompts.push(next);
-        const errors = (0, engine_1.validateManifest)(m);
-        if (errors.length)
-            throw new Error(errors.join('; '));
-        (0, engine_1.writeRawManifest)(t.dir, m);
-        return sendJson(res, 200, { ok: true });
-    }
-    if (req.method === 'POST' && pathname === '/api/remove-variable') {
-        const t = requireTemplate(body.templateName);
-        const m = (0, engine_1.readRawManifest)(t.dir);
-        const token = String(body.token || '');
-        m.prompts = (m.prompts || []).filter((p) => (p.token || p.name) !== token);
-        (0, engine_1.writeRawManifest)(t.dir, m);
-        return sendJson(res, 200, { ok: true });
-    }
-    if (req.method === 'POST' && pathname === '/api/add-component') {
-        addComponent(requireTemplate(body.templateName), body.component, !!body.default);
-        return sendJson(res, 200, { ok: true });
-    }
-    if (req.method === 'POST' && pathname === '/api/set-output') {
-        const t = requireTemplate(body.templateName);
-        const m = (0, engine_1.readRawManifest)(t.dir);
-        m.output = body.output === 'merge' ? 'merge' : 'new';
-        (0, engine_1.writeRawManifest)(t.dir, m);
+        const m = (0, engine_1.readDotnetManifest)(t.dir);
+        if (m.symbols)
+            delete m.symbols[String(body.name)];
+        (0, engine_1.writeDotnetManifest)(t.dir, m);
         return sendJson(res, 200, { ok: true });
     }
     if (req.method === 'POST' && pathname === '/api/add-dir') {
@@ -417,13 +262,21 @@ async function handleApi(req, res, pathname, query) {
     }
     if (req.method === 'POST' && pathname === '/api/validate') {
         const t = requireTemplate(body.templateName);
-        return sendJson(res, 200, { ok: true, errors: (0, engine_1.validateManifest)((0, engine_1.readRawManifest)(t.dir)) });
+        const errors = [];
+        try {
+            (0, engine_1.parseDotnetTemplate)(t.dir);
+        }
+        catch (e) {
+            errors.push(e.message);
+        }
+        if (!t.shortName)
+            errors.push('shortName is required');
+        return sendJson(res, 200, { ok: true, errors });
     }
-    // Directory browser for folder pickers: list subdirectories of a path.
+    // Directory browser for folder pickers.
     if (req.method === 'GET' && pathname === '/api/fs/dirs') {
         const raw = (query.path || '').trim();
         if (!raw) {
-            // Roots: drive letters on Windows, '/' elsewhere.
             if (process.platform === 'win32') {
                 const drives = [];
                 for (let c = 65; c <= 90; c++) {
@@ -441,8 +294,7 @@ async function handleApi(req, res, pathname, query) {
         const dir = path.resolve(raw);
         if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory())
             throw new Error(`Not a directory: ${dir}`);
-        const dirs = fs
-            .readdirSync(dir, { withFileTypes: true })
+        const dirs = fs.readdirSync(dir, { withFileTypes: true })
             .filter((e) => e.isDirectory() && !e.name.startsWith('.') && e.name !== 'node_modules')
             .map((e) => e.name)
             .sort((a, b) => a.localeCompare(b));
@@ -456,7 +308,7 @@ async function handleApi(req, res, pathname, query) {
         fs.mkdirSync(dir, { recursive: true });
         return sendJson(res, 200, { ok: true, dir });
     }
-    // ---- File explorer / editor APIs (operate inside a template's directory) ----
+    // ---- File explorer / editor APIs ----
     if (req.method === 'GET' && pathname === '/api/files') {
         const base = resolveBase(query);
         return sendJson(res, 200, { ok: true, root: base, tree: buildTree(base, base) });
@@ -483,17 +335,14 @@ async function handleApi(req, res, pathname, query) {
         const full = safeJoin(base, body.path || '');
         if (fs.existsSync(full)) {
             const isDir = fs.statSync(full).isDirectory();
-            // A folder that already exists can never be "overwritten" by a new one;
-            // a file can, but only with the explicit overwrite flag.
             if (body.dir || isDir || !body.overwrite) {
                 throw new Error(isDir ? 'A folder with this name already exists here' : 'A file with this name already exists here');
             }
             fs.writeFileSync(full, String(body.content ?? ''));
             return sendJson(res, 200, { ok: true, overwritten: true });
         }
-        if (body.dir) {
+        if (body.dir)
             fs.mkdirSync(full, { recursive: true });
-        }
         else {
             fs.mkdirSync(path.dirname(full), { recursive: true });
             fs.writeFileSync(full, String(body.content ?? ''));
@@ -527,18 +376,9 @@ async function handleApi(req, res, pathname, query) {
     sendJson(res, 404, { error: 'Not found' });
 }
 const CONTENT_TYPES = {
-    '.html': 'text/html',
-    '.js': 'text/javascript',
-    '.mjs': 'text/javascript',
-    '.css': 'text/css',
-    '.json': 'application/json',
-    '.svg': 'image/svg+xml',
-    '.map': 'application/json',
-    '.woff': 'font/woff',
-    '.woff2': 'font/woff2',
-    '.ttf': 'font/ttf',
-    '.png': 'image/png',
-    '.ico': 'image/x-icon',
+    '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css',
+    '.json': 'application/json', '.svg': 'image/svg+xml', '.map': 'application/json',
+    '.woff': 'font/woff', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.png': 'image/png', '.ico': 'image/x-icon',
 };
 function serveStatic(res, pathname) {
     const rel = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
@@ -548,14 +388,8 @@ function serveStatic(res, pathname) {
         res.end('Not found');
         return;
     }
-    // Files under assets/ are content-hashed by Vite, so they're immutable; the
-    // entry HTML must always revalidate so a rebuild's new bundle is picked up
-    // without a manual hard-refresh.
     const cache = /^assets\//.test(rel) ? 'public, max-age=31536000, immutable' : 'no-store';
-    res.writeHead(200, {
-        'Content-Type': CONTENT_TYPES[path.extname(full)] || 'application/octet-stream',
-        'Cache-Control': cache,
-    });
+    res.writeHead(200, { 'Content-Type': CONTENT_TYPES[path.extname(full)] || 'application/octet-stream', 'Cache-Control': cache });
     res.end(fs.readFileSync(full));
 }
 const server = http.createServer((req, res) => {
@@ -571,16 +405,10 @@ const announce = (port) => {
     const url = `http://localhost:${port}`;
     console.log(`create-library back-office (web) → ${url}`);
     if (!process.env.NO_OPEN) {
-        const opener = process.platform === 'win32' ? `start "" "${url}"` :
-            process.platform === 'darwin' ? `open "${url}"` :
-                `xdg-open "${url}"`;
+        const opener = process.platform === 'win32' ? `start "" "${url}"` : process.platform === 'darwin' ? `open "${url}"` : `xdg-open "${url}"`;
         (0, child_process_1.exec)(opener, () => { });
     }
 };
-/**
- * Listen on PORT; if it's taken, try the next ports automatically. When PORT is
- * set explicitly via the environment we don't shift it (the user asked for it).
- */
 const start = (port, attemptsLeft) => {
     server.once('error', (err) => {
         if (err.code === 'EADDRINUSE' && attemptsLeft > 0 && !process.env.PORT) {
@@ -597,7 +425,6 @@ const start = (port, attemptsLeft) => {
     });
     server.listen(port, '127.0.0.1');
 };
-// One persistent handler so a failed attempt's callback can't fire on a later bind.
 server.on('listening', () => {
     const addr = server.address();
     announce(typeof addr === 'object' && addr ? addr.port : PORT);

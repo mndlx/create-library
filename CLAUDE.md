@@ -24,12 +24,13 @@ back-office (`bo-web/` → builds into `web/`, served by `bin/bo-web.ts`).
   `SwitchField` for toggles, `StackedField` for wide inputs, and `PanelInput`/
   `PanelSelect` (filled, compact) for every control. Folder paths use
   `FolderField` (server-backed picker), not free-text. See the `panel-ui` skill.
-- Engine stays framework-free and synchronous where possible; the server is a
-  thin HTTP layer over `engine/`.
-- Dynamic tokens default to `@@…@@`; templates without `tokenConfig` use the
-  legacy `__…__`. Tokens are auto-detected from file contents and names.
-- Generation must never leak authoring files (`template.json`, `features/`) into
-  output for flat templates unless `includeManifest` is set.
+- **Generation is `dotnet new`** — the engine (`engine/dotnet.ts`) discovers
+  templates by `.template.config/template.json`, exposes the manifest `symbols`
+  as parameters, and generates by shelling out to the .NET CLI (install → new
+  `<shortName>` → uninstall). Requires the .NET SDK on PATH. The old custom
+  token engine (`@@…@@`, features, presets, publish/zip) is removed.
+- The server is a thin HTTP layer over `engine/`; file CRUD operates on any
+  template/workspace directory.
 
 ## Gotchas
 
